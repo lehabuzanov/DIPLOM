@@ -20,8 +20,8 @@
 - поиск по словоформе, лемме и фразе;
 - сохранение запросов;
 - сохранение подкорпусов;
-- частотные списки, биграммы и сравнение подкорпусов;
-- ручная загрузка статьи через пользовательский интерфейс;
+- частотные списки, биграммы и сравнение статей или подкорпусов;
+- ручная загрузка статьи через редакторский интерфейс;
 - пакетный импорт;
 - синхронизация архива журнала из OJS;
 - самопроверка ключевых страниц и сценариев.
@@ -32,19 +32,17 @@
 - `sem_corpus/apps/core/` — главная страница, страницы «О корпусе» и инструкции.
 - `sem_corpus/apps/accounts/` — регистрация, кабинет, роли и история действий.
 - `sem_corpus/apps/corpus/` — модели корпуса, поиск, импорт, подкорпуса, редакторская загрузка.
-- `sem_corpus/apps/analytics/` — частотность, графики, сравнение подкорпусов.
-- `sample_data/` — тестовые данные для пакетного импорта.
+- `sem_corpus/apps/analytics/` — частотность, графики и сравнение материалов.
+- `sample_data/` — данные для пакетного импорта.
 - `docs/` — техническая и пользовательская документация.
 
-## Быстрый запуск
-
-### Вариант 1. Docker Compose
+## Быстрый запуск через Docker
 
 1. Скопируйте `.env.example` в `.env`.
 2. Запустите:
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
 3. Откройте в браузере:
@@ -53,9 +51,34 @@ docker compose up
 http://127.0.0.1:8000/
 ```
 
-### Вариант 2. Локальный запуск через Python и PostgreSQL
+При первом запуске контейнер:
 
-1. Создайте базу данных PostgreSQL `sem_corpus`.
+- установит зависимости;
+- выполнит миграции;
+- очистит старый демо-контент;
+- создаст служебные роли и пользователей.
+
+После того как сайт уже поднялся, архив журнала можно подтянуть вручную:
+
+```bash
+docker compose exec web python manage.py sync_ojs_journal --skip-existing
+```
+
+## Остановка приложения
+
+```bash
+docker compose down
+```
+
+Если нужно остановить и удалить тома базы данных и media:
+
+```bash
+docker compose down -v
+```
+
+## Локальный запуск через Python и PostgreSQL
+
+1. Создайте базу PostgreSQL `sem_corpus`.
 2. Скопируйте `.env.example` в `.env` и укажите параметры подключения.
 3. Создайте виртуальное окружение и установите зависимости:
 
@@ -65,25 +88,16 @@ python -m venv .venv
 python -m pip install -r requirements.txt
 ```
 
-4. Выполните миграции:
+4. Выполните миграции и подготовьте базовые записи:
 
 ```bash
 python manage.py migrate
-```
-
-5. Загрузите стартовые данные:
-
-```bash
+python manage.py purge_demo_content
 python manage.py seed_demo_data
-```
-
-6. При необходимости синхронизируйте реальный архив журнала:
-
-```bash
 python manage.py sync_ojs_journal --skip-existing
 ```
 
-7. Запустите сервер:
+5. Запустите сервер:
 
 ```bash
 python manage.py runserver
@@ -99,41 +113,19 @@ python manage.py runserver
 /corpus/articles/upload/
 ```
 
-Для расширенной работы с данными также доступна админ-панель:
+Также доступна административная панель:
 
 ```text
 /admin/
 ```
 
-## Автоматическое пополнение корпуса из OJS
-
-Полная синхронизация архива журнала:
-
-```bash
-python manage.py sync_ojs_journal
-```
-
-Только новые статьи:
-
-```bash
-python manage.py sync_ojs_journal --skip-existing
-```
-
-Только метаданные, без скачивания PDF:
-
-```bash
-python manage.py sync_ojs_journal --skip-pdf-download
-```
-
 ## Самопроверка
-
-Проверка ключевых страниц и основных функций:
 
 ```bash
 python manage.py selfcheck_corpus
 ```
 
-## Демо-учетные записи
+## Служебные учётные записи
 
 - `researcher` / `research123`
 - `editor` / `editor123`
@@ -142,6 +134,7 @@ python manage.py selfcheck_corpus
 ## Полезные команды
 
 ```bash
+python manage.py purge_demo_content
 python manage.py seed_demo_data
 python manage.py import_corpus_batch --source sample_data/batch_import
 python manage.py sync_ojs_journal --skip-existing

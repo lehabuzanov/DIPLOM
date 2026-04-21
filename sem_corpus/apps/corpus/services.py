@@ -388,45 +388,52 @@ def add_article_to_subcorpus(subcorpus: SavedSubcorpus, article: Article) -> Non
 
 
 def get_frequency_data(articles_queryset, mode: str = "lemma", limit: int = 25):
+    frequency_map = get_frequency_counts(articles_queryset, mode=mode)
+    rows = [{"label": label, "count": count} for label, count in frequency_map.items()]
+    rows.sort(key=lambda item: (-item["count"], item["label"]))
+    return rows[:limit]
+
+
+def get_frequency_counts(articles_queryset, mode: str = "lemma"):
     if mode == "word":
         rows = (
             ArticleToken.objects.filter(article__in=articles_queryset, is_alpha=True)
             .values("normalized")
             .annotate(total=Count("id"))
-            .order_by("-total", "normalized")[:limit]
         )
-        return [{"label": row["normalized"], "count": row["total"]} for row in rows]
+        return {row["normalized"]: row["total"] for row in rows if row["normalized"]}
 
     rows = (
         ArticleToken.objects.filter(article__in=articles_queryset, lemma__isnull=False)
         .values("lemma__normalized")
         .annotate(total=Count("id"))
-        .order_by("-total", "lemma__normalized")[:limit]
     )
-    return [{"label": row["lemma__normalized"], "count": row["total"]} for row in rows]
+    return {row["lemma__normalized"]: row["total"] for row in rows if row["lemma__normalized"]}
 
 
 def get_bigram_data(articles_queryset, limit: int = 20):
     counter = Counter()
-    for article in articles_queryset.prefetch_related("tokens"):
-        alpha_tokens = [token.lemma.normalized if token.lemma else token.normalized for token in article.tokens.all() if token.is_alpha]
-        for left, right in zip(alpha_tokens, alpha_tokens[1:]):
-            if left and right:
-                counter[f"{left} {right}"] += 1
+    previous_token = {}
+    token_rows = (
+        ArticleToken.objects.filter(article__in=articles_queryset, is_alpha=True)
+        .select_related("lemma")
+        .order_by("article_id", "position")
+        .iterator(chunk_size=2000)
+    )
+    for token in token_rows:
+        label = token.lemma.normalized if token.lemma_id else token.normalized
+        if not label:
+            continue
+        prior = previous_token.get(token.article_id)
+        if prior:
+            counter[f"{prior} {label}"] += 1
+        previous_token[token.article_id] = label
     return [{"label": label, "count": count} for label, count in counter.most_common(limit)]
 
 
-def compare_subcorpora(left_subcorpus: SavedSubcorpus, right_subcorpus: SavedSubcorpus, limit: int = 15):
-    left_articles = left_subcorpus.articles.all()
-    right_articles = right_subcorpus.articles.all()
-    left_freq = {
-        item["label"]: item["count"]
-        for item in get_frequency_data(left_articles, mode="lemma", limit=200)
-    }
-    right_freq = {
-        item["label"]: item["count"]
-        for item in get_frequency_data(right_articles, mode="lemma", limit=200)
-    }
+def compare_frequency_sets(left_articles, right_articles, mode: str = "lemma", limit: int = 15):
+    left_freq = get_frequency_counts(left_articles, mode=mode)
+    right_freq = get_frequency_counts(right_articles, mode=mode)
     all_keys = set(left_freq) | set(right_freq)
     rows = []
     for key in all_keys:
@@ -442,6 +449,10 @@ def compare_subcorpora(left_subcorpus: SavedSubcorpus, right_subcorpus: SavedSub
         )
     rows.sort(key=lambda item: abs(item["delta"]), reverse=True)
     return rows[:limit]
+
+
+def compare_subcorpora(left_subcorpus: SavedSubcorpus, right_subcorpus: SavedSubcorpus, mode: str = "lemma", limit: int = 15):
+    return compare_frequency_sets(left_subcorpus.articles.all(), right_subcorpus.articles.all(), mode=mode, limit=limit)
 
 
 def export_search_results_csv(results):

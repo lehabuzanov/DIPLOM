@@ -63,6 +63,7 @@ class Command(BaseCommand):
             ("Article catalog", "corpus:article-list"),
             ("Search", "corpus:search"),
             ("Analytics", "analytics:dashboard"),
+            ("Tag cloud", "analytics:tag-cloud"),
         ]:
             response = client.get(reverse(url_name))
             check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
@@ -99,12 +100,12 @@ class Command(BaseCommand):
         else:
             notes.append("Lemma search was skipped because there are no indexed tokens with lemmas yet.")
 
-        check(
-            "Saved subcorpora",
-            SavedSubcorpus.objects.exists(),
-            f"{SavedSubcorpus.objects.count()} subcorpus record(s) available.",
-            "No saved subcorpora were found.",
-        )
+        if SavedSubcorpus.objects.exists():
+            self.stdout.write(
+                self.style.SUCCESS(f"[OK] Saved subcorpora: {SavedSubcorpus.objects.count()} subcorpus record(s) available.")
+            )
+        else:
+            notes.append("No saved subcorpora were found yet. Create one from search results to test reuse scenarios.")
 
         if editor:
             client.force_login(editor)
@@ -117,7 +118,7 @@ class Command(BaseCommand):
             )
             client.logout()
         else:
-            notes.append("Editor upload page was not checked because the demo editor user is missing.")
+            notes.append("Editor upload page was not checked because the editor user is missing.")
 
         ojs_count = Article.objects.filter(import_source="ojs_sync").count()
         if ojs_count:

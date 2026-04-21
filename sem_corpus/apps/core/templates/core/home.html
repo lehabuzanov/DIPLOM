@@ -9,10 +9,10 @@
         <div class="row g-4 align-items-center">
             <div class="col-lg-7">
                 <span class="eyebrow">Цифровой корпусный ресурс</span>
-                <h1 class="display-6 mt-2 mb-3">Корпус научного журнала для хранения, поиска и аналитики текстов</h1>
+                <h1 class="display-6 mt-2 mb-3">Поиск, анализ и повторное использование статей научного журнала</h1>
                 <p class="lead text-secondary mb-4">
-                    Ресурс объединяет выпуски журнала, метаданные публикаций, очищенные тексты статей,
-                    полнотекстовый поиск, подкорпуса и базовые аналитические режимы в едином веб-интерфейсе.
+                    Корпус объединяет выпуски журнала, метаданные публикаций, очищенные тексты статей,
+                    полнотекстовый поиск, подкорпуса, аналитику и облако тегов в едином веб-интерфейсе.
                 </p>
                 <form method="get" action="{% url 'corpus:search' %}" class="row g-2 mb-3">
                     <div class="col-md-8">
@@ -25,6 +25,7 @@
                 <div class="hero-actions">
                     <a class="btn btn-outline-primary" href="{% url 'corpus:issue-list' %}">Архив выпусков</a>
                     <a class="btn btn-outline-primary" href="{% url 'analytics:dashboard' %}">Открыть аналитику</a>
+                    <a class="btn btn-outline-primary" href="{% url 'analytics:tag-cloud' %}">Облако тегов</a>
                     <a class="btn btn-outline-primary" href="{% url 'core:guide' %}">Инструкция пользователя</a>
                     {% if can_edit_corpus %}
                         <a class="btn btn-primary" href="{% url 'corpus:editor-upload' %}">Загрузить статью</a>
@@ -64,7 +65,7 @@
                         <li>Искать статьи по тексту и метаданным одновременно.</li>
                         <li>Находить словоформы, леммы, фразы и контексты.</li>
                         <li>Сохранять подкорпуса и повторно использовать выборки.</li>
-                        <li>Сравнивать частотности и смотреть распределения по разделам и годам.</li>
+                        <li>Сравнивать материалы и просматривать облако тегов.</li>
                     </ul>
                 </div>
             </div>
@@ -145,7 +146,7 @@
                 datasets: [{
                     label: 'Количество статей',
                     data: yearData,
-                    backgroundColor: '#006798',
+                    backgroundColor: '#1f66ff',
                     borderRadius: 6,
                 }]
             },

@@ -18,7 +18,7 @@
         <header class="site-header">
             <div class="topline">
                 <div class="container d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 py-2">
-                    <div class="small">{{ university_name }}</div>
+                    <div class="small fw-semibold">{{ university_name }}</div>
                     <div class="small d-flex flex-wrap gap-3">
                         <a href="{{ journal_base_url }}" class="text-decoration-none">Сайт журнала</a>
                         <a href="{% url 'core:guide' %}" class="text-decoration-none">Инструкция пользователя</a>
@@ -26,11 +26,12 @@
                 </div>
             </div>
             <div class="brandbar">
-                <div class="container py-3 py-lg-4">
+                <div class="container brandbar-inner">
                     <div class="brand-lockup">
-                        <div class="brand-overline">Электронный корпус научного журнала</div>
-                        <a class="brand-title text-decoration-none" href="{% url 'core:home' %}">{{ site_short_title }}</a>
-                        <div class="brand-subtitle">Хранение, поиск, аналитика и повторное использование текстов научного журнала ИжГТУ имени М. Т. Калашникова</div>
+                        <div class="brand-overline">ИжГТУ имени М. Т. Калашникова</div>
+                        <a class="brand-title text-decoration-none" href="{% url 'core:home' %}">
+                            Электронный корпус журнала «Социально-экономическое управление: теория и практика»
+                        </a>
                     </div>
                 </div>
             </div>
@@ -46,6 +47,7 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:article-list' %}">Статьи</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:search' %}">Поиск</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'analytics:dashboard' %}">Аналитика</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'analytics:tag-cloud' %}">Облако тегов</a></li>
                             {% if request.user.is_authenticated %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'corpus:subcorpus-list' %}">Подкорпуса</a></li>
                             {% endif %}
@@ -59,12 +61,12 @@
                                 <li class="nav-item">
                                     <form method="post" action="{% url 'logout' %}">
                                         {% csrf_token %}
-                                        <button class="btn btn-sm btn-outline-primary" type="submit">Выйти</button>
+                                        <button class="btn btn-sm btn-header-outline" type="submit">Выйти</button>
                                     </form>
                                 </li>
                             {% else %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'accounts:register' %}">Регистрация</a></li>
-                                <li class="nav-item"><a class="btn btn-sm btn-primary" href="{% url 'login' %}">Войти</a></li>
+                                <li class="nav-item"><a class="btn btn-sm btn-light header-login" href="{% url 'login' %}">Войти</a></li>
                             {% endif %}
                         </ul>
                     </div>
@@ -81,23 +83,14 @@
 
         <footer class="site-footer">
             <div class="container py-4">
-                <div class="row g-3 align-items-start">
-                    <div class="col-lg-7">
-                        <div class="footer-title">Корпус журнала «Социально-экономическое управление: теория и практика»</div>
-                        <p class="mb-0 small text-secondary">
-                            Веб-модуль предназначен для накопления статей, полнотекстового поиска,
-                            корпусного анализа и подготовки исследовательских выборок с возможностью
-                            дальнейшей интеграции в инфраструктуру ИжГТУ.
-                        </p>
-                    </div>
-                    <div class="col-lg-5">
-                        <div class="footer-links">
-                            <a href="{{ journal_base_url }}">Перейти на сайт журнала</a>
-                            <a href="{% url 'core:guide' %}">Открыть инструкцию пользователя</a>
-                            {% if can_edit_corpus %}
-                                <a href="{% url 'corpus:editor-upload' %}">Открыть форму загрузки статьи</a>
-                            {% endif %}
-                        </div>
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-center">
+                    <div class="footer-title mb-0">Корпус журнала «Социально-экономическое управление: теория и практика»</div>
+                    <div class="footer-links flex-lg-row">
+                        <a href="{{ journal_base_url }}">Сайт журнала</a>
+                        <a href="{% url 'core:guide' %}">Инструкция пользователя</a>
+                        {% if can_edit_corpus %}
+                            <a href="{% url 'corpus:editor-upload' %}">Загрузка статьи</a>
+                        {% endif %}
                     </div>
                 </div>
             </div>

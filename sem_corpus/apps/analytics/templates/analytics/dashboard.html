@@ -7,17 +7,30 @@
     <h1 class="h2 mb-2">Аналитика корпуса</h1>
     <p class="mb-0">
         Частотные списки, распределение публикаций по годам и разделам, биграммы
-        и сравнение подкорпусов доступны в едином аналитическом режиме.
+        и сравнение статей или подкорпусов доступны в едином аналитическом режиме.
     </p>
 </div>
 
 <div class="card surface-card mb-4">
     <div class="card-body p-4">
         <form method="get" class="row g-3 align-items-end">
-            <div class="col-md-3">{{ form.subcorpus.label_tag }}{{ form.subcorpus }}</div>
-            <div class="col-md-3">{{ form.mode.label_tag }}{{ form.mode }}</div>
-            <div class="col-md-3">{{ form.left_subcorpus.label_tag }}{{ form.left_subcorpus }}</div>
-            <div class="col-md-3">{{ form.right_subcorpus.label_tag }}{{ form.right_subcorpus }}</div>
+            <div class="col-lg-4">{{ form.article.label_tag }}{{ form.article }}</div>
+            <div class="col-lg-4">{{ form.subcorpus.label_tag }}{{ form.subcorpus }}</div>
+            <div class="col-lg-4">{{ form.mode.label_tag }}{{ form.mode }}</div>
+            <div class="col-lg-6">
+                <label class="form-label mb-2">Сравнение статей</label>
+                <div class="row g-3">
+                    <div class="col-md-6">{{ form.left_article }}</div>
+                    <div class="col-md-6">{{ form.right_article }}</div>
+                </div>
+            </div>
+            <div class="col-lg-6">
+                <label class="form-label mb-2">Сравнение подкорпусов</label>
+                <div class="row g-3">
+                    <div class="col-md-6">{{ form.left_subcorpus }}</div>
+                    <div class="col-md-6">{{ form.right_subcorpus }}</div>
+                </div>
+            </div>
             <div class="col-12">
                 <button class="btn btn-primary" type="submit">Обновить аналитику</button>
             </div>
@@ -48,7 +61,10 @@
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">Частотный список</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h4 mb-0">Частотный список</h2>
+                    <span class="small text-secondary">{{ selected_scope_label }}</span>
+                </div>
                 <div class="table-responsive">
                     <table class="table table-sm">
                         <thead>
@@ -75,27 +91,34 @@
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">Биграммы</h2>
-                <div class="table-responsive">
-                    <table class="table table-sm">
-                        <thead>
-                            <tr>
-                                <th>Сочетание</th>
-                                <th class="text-end">Частота</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for row in bigram_rows %}
-                                <tr>
-                                    <td>{{ row.label }}</td>
-                                    <td class="text-end">{{ row.count }}</td>
-                                </tr>
-                            {% empty %}
-                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h4 mb-0">Биграммы</h2>
+                    <span class="small text-secondary">{{ selected_scope_label }}</span>
                 </div>
+                {% if bigram_note %}
+                    <p class="text-secondary mb-0">{{ bigram_note }}</p>
+                {% else %}
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                                <tr>
+                                    <th>Сочетание</th>
+                                    <th class="text-end">Частота</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for row in bigram_rows %}
+                                    <tr>
+                                        <td>{{ row.label }}</td>
+                                        <td class="text-end">{{ row.count }}</td>
+                                    </tr>
+                                {% empty %}
+                                    <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -103,31 +126,38 @@
 
 <div class="card surface-card mt-4">
     <div class="card-body p-4">
-        <h2 class="h4 mb-3">Сравнение двух подкорпусов</h2>
-        <div class="table-responsive">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Лемма</th>
-                        <th class="text-end">Подкорпус A</th>
-                        <th class="text-end">Подкорпус B</th>
-                        <th class="text-end">Разница</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for row in comparison_rows %}
-                        <tr>
-                            <td>{{ row.label }}</td>
-                            <td class="text-end">{{ row.left_count }}</td>
-                            <td class="text-end">{{ row.right_count }}</td>
-                            <td class="text-end">{{ row.delta }}</td>
-                        </tr>
-                    {% empty %}
-                        <tr><td colspan="4" class="text-secondary">Выберите два подкорпуса для сравнения.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Сравнение материалов A/B</h2>
+            {% if comparison_scope_label %}<span class="small text-secondary">{{ comparison_scope_label }}</span>{% endif %}
         </div>
+        {% if comparison_note %}
+            <p class="text-secondary mb-0">{{ comparison_note }}</p>
+        {% else %}
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Лемма</th>
+                            <th class="text-end">Материал A</th>
+                            <th class="text-end">Материал B</th>
+                            <th class="text-end">Разница</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison_rows %}
+                            <tr>
+                                <td>{{ row.label }}</td>
+                                <td class="text-end">{{ row.left_count }}</td>
+                                <td class="text-end">{{ row.right_count }}</td>
+                                <td class="text-end">{{ row.delta }}</td>
+                            </tr>
+                        {% empty %}
+                            <tr><td colspan="4" class="text-secondary">Выберите две статьи или два подкорпуса для сравнения.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -147,7 +177,7 @@
                 label: 'Статьи',
                 data: yearTotals,
                 fill: false,
-                borderColor: '#006798',
+                borderColor: '#1357ff',
                 tension: 0.2
             }]
         },
@@ -164,7 +194,7 @@
             datasets: [{
                 label: 'Статьи',
                 data: sectionTotals,
-                backgroundColor: '#008acb',
+                backgroundColor: '#2d77ff',
                 borderRadius: 6
             }]
         },

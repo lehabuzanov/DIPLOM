@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+
+{% block title %}Облако тегов | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="h2 mb-2">Облако тегов</h1>
+    <p class="mb-0">
+        В облако попадают только цельные и часто встречающиеся слова. Источник:
+        <strong>{{ cloud_source }}</strong>.
+    </p>
+</div>
+
+<div class="card surface-card mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h2 class="h4 mb-0">Частотные теги корпуса</h2>
+            <span class="tag-cloud-meta">Элементов: {{ tag_total }}</span>
+        </div>
+        <div class="tag-cloud">
+            {% for tag in tags %}
+                <span class="tag-cloud-item" style="font-size: {{ tag.size }}rem; color: {{ tag.color }};">
+                    {{ tag.label }}
+                </span>
+            {% empty %}
+                <p class="text-secondary mb-0">Для облака пока недостаточно данных.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<div class="note-card">
+    <h2 class="h4">Как формируется облако</h2>
+    <p class="mb-0">
+        Система отсеивает многословные и технически шумные элементы, оставляя короткие и хорошо читаемые теги,
+        которые действительно часто встречаются в материалах корпуса.
+    </p>
+</div>
+{% endblock %}

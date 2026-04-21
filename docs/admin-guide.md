@@ -18,7 +18,7 @@
 
 Через форму загрузки редактор может:
 
-- добавить выпуск, если его еще нет;
+- добавить выпуск, если его ещё нет;
 - добавить новую статью;
 - указать авторов и аффилиации;
 - загрузить файл статьи;
@@ -49,11 +49,13 @@ python manage.py sync_ojs_journal --limit-issues 2
 - проверяет корректность данных;
 - запускает индексацию;
 - выполняет самопроверку корпуса;
-- настраивает окружение и базу данных.
+- настраивает окружение и базу данных;
+- очищает устаревший демо-контент, если он был загружен ранее.
 
 ## Полезные команды
 
 ```bash
+python manage.py purge_demo_content
 python manage.py seed_demo_data
 python manage.py import_corpus_batch --source sample_data/batch_import
 python manage.py sync_ojs_journal --skip-existing
