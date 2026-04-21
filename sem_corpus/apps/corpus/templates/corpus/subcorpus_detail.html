@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+
+{% block title %}{{ subcorpus.name }} | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">{{ subcorpus.name }}</h1>
+        <p class="text-secondary mb-0">{{ subcorpus.description|default:"Подкорпус сформирован из статей корпуса." }}</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Анализировать</a>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Статьи</div>
+            <div class="stat-value">{{ subcorpus.article_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Токены</div>
+            <div class="stat-value">{{ subcorpus.token_count }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Обновлен</div>
+            <div class="stat-value fs-4">{{ subcorpus.updated_at|date:"d.m.Y" }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="card surface-card">
+    <div class="card-body">
+        <h2 class="h4 mb-3">Состав подкорпуса</h2>
+        <div class="vstack gap-3">
+            {% for article in subcorpus.articles.all %}
+                <div class="border-bottom pb-3">
+                    <a class="text-decoration-none fw-semibold" href="{{ article.get_absolute_url }}">{{ article.title }}</a>
+                    <div class="small text-secondary">{{ article.author_line }} • {{ article.issue.year }}</div>
+                </div>
+            {% empty %}
+                <p class="text-secondary mb-0">Подкорпус пока пуст.</p>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

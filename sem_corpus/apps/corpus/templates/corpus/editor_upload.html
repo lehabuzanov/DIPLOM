@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Загрузка статьи | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="h2 mb-2">Загрузка статьи в корпус</h1>
+    <p class="mb-0">
+        Редакторская форма предназначена для ручного добавления новой статьи, ее метаданных,
+        очищенного текста и исходного файла. Для сложного администрирования доступен также <code>/admin/</code>.
+    </p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card surface-card">
+            <div class="card-body p-4">
+                <form method="post" enctype="multipart/form-data" class="vstack gap-3">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <div class="d-flex flex-wrap gap-2">
+                        <button class="btn btn-primary" type="submit">Сохранить статью</button>
+                        <a class="btn btn-outline-primary" href="{% url 'corpus:article-list' %}">Перейти к каталогу статей</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="note-card mb-4">
+            <h2 class="h4">Подсказка по авторам</h2>
+            <p class="mb-0">
+                Для каждого автора используйте отдельную строку в формате
+                <strong>Фамилия Имя Отчество | Организация</strong>.
+            </p>
+        </div>
+        <div class="note-card mb-4">
+            <h2 class="h4">Если есть PDF</h2>
+            <p class="mb-0">
+                Прикрепите файл статьи, чтобы сохранить его в корпусе и показать ссылку в карточке публикации.
+            </p>
+        </div>
+        <div class="note-card">
+            <h2 class="h4">Автоматическое пополнение</h2>
+            <p class="mb-0">
+                Для загрузки материалов из сайта журнала используйте команду
+                <code>python manage.py sync_ojs_journal</code>.
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

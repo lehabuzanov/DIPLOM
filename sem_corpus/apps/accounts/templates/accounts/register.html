@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card surface-card shadow-sm border-0">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h3 mb-3">Регистрация исследователя</h1>
+                <p class="text-secondary">После регистрации можно сохранять запросы, формировать подкорпуса и повторно использовать результаты анализа.</p>
+                <form method="post" class="row g-3">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <div class="col-12">
+                        <button class="btn btn-primary" type="submit">Создать учетную запись</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

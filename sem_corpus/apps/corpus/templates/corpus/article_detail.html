@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article.title }} | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<article class="row g-4">
+    <div class="col-lg-8">
+        <div class="card surface-card mb-4">
+            <div class="card-body p-4">
+                <div class="small text-secondary mb-2">
+                    {{ article.issue.year }} • Том {{ article.issue.volume }}, № {{ article.issue.number }}
+                    {% if article.section %} • {{ article.section.name }}{% endif %}
+                </div>
+                <h1 class="h2 mb-3">{{ article.title }}</h1>
+                <p class="lead author-line">{{ article.author_line }}</p>
+                <dl class="row small mb-4">
+                    <dt class="col-sm-4">Язык</dt>
+                    <dd class="col-sm-8">{{ article.get_language_display }}</dd>
+                    <dt class="col-sm-4">Страницы</dt>
+                    <dd class="col-sm-8">{{ article.pages|default:"—" }}</dd>
+                    <dt class="col-sm-4">DOI</dt>
+                    <dd class="col-sm-8">{{ article.doi|default:"—" }}</dd>
+                    <dt class="col-sm-4">Дата добавления</dt>
+                    <dd class="col-sm-8">{{ article.created_at|date:"d.m.Y" }}</dd>
+                </dl>
+                <h2 class="h5">Аннотация</h2>
+                <p>{{ article.abstract|default:"Аннотация отсутствует." }}</p>
+                <h2 class="h5 mt-4">Ключевые слова</h2>
+                <p class="mb-0">
+                    {% for keyword in article.keywords.all %}
+                        <span class="badge text-bg-light border me-1">{{ keyword.name }}</span>
+                    {% empty %}
+                        <span class="text-secondary">Не указаны.</span>
+                    {% endfor %}
+                </p>
+            </div>
+        </div>
+
+        <div class="card surface-card">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h4 mb-0">Очищенный текст</h2>
+                    <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:search' %}?text_query={{ article.title|urlencode }}">Искать по статье</a>
+                </div>
+                <div class="article-text">{{ article.text.cleaned_text|linebreaks }}</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card surface-card mb-4">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Источники и файлы</h2>
+                {% if article.original_url %}
+                    <p><a href="{{ article.original_url }}" class="text-decoration-none">Оригинальная публикация</a></p>
+                {% endif %}
+                <div class="vstack gap-2">
+                    {% for file in article.files.all %}
+                        <div class="small">
+                            {% if file.file %}
+                                <a href="{{ file.file.url }}" class="text-decoration-none">{{ file.original_filename|default:file.file.name }}</a>
+                            {% elif file.external_url %}
+                                <a href="{{ file.external_url }}" class="text-decoration-none">{{ file.original_filename|default:"Внешний файл" }}</a>
+                            {% else %}
+                                {{ file.original_filename|default:"Файл статьи" }}
+                            {% endif %}
+                        </div>
+                    {% empty %}
+                        <p class="text-secondary mb-0">Файлы не загружены.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        {% if request.user.is_authenticated %}
+            <div class="card surface-card mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Добавить в подкорпус</h2>
+                    <form method="post" action="{% url 'corpus:article-add-to-subcorpus' article.pk %}" class="vstack gap-3">
+                        {% csrf_token %}
+                        {{ add_to_subcorpus_form.as_p }}
+                        <button class="btn btn-primary" type="submit">Сохранить</button>
+                    </form>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="card surface-card">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Похожие статьи</h2>
+                <div class="vstack gap-3">
+                    {% for related in related_articles %}
+                        <div>
+                            <a class="text-decoration-none d-block" href="{{ related.get_absolute_url }}">{{ related.title }}</a>
+                            <div class="small text-secondary">{{ related.issue.year }}</div>
+                        </div>
+                    {% empty %}
+                        <p class="text-secondary mb-0">Дополнительные материалы не найдены.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</article>
+{% endblock %}

@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Новый подкорпус | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-7">
+        <div class="card surface-card">
+            <div class="card-body p-4">
+                <h1 class="h3 mb-3">Сохранение подкорпуса</h1>
+                <p class="text-secondary">Подкорпус будет сформирован на основе выбранных фильтров и доступен в личном кабинете.</p>
+                <form method="post" class="vstack gap-3">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Сохранить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

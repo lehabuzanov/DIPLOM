@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% load querystring %}
+
+{% block title %}Выпуски | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Каталог выпусков</h1>
+        <p class="text-secondary mb-0">Архив номеров журнала и связанных с ними статей.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'corpus:article-list' %}">Перейти к статьям</a>
+</div>
+
+<div class="row g-4">
+    {% for issue in issues %}
+        <div class="col-md-6 col-xl-4">
+            <div class="card surface-card h-100">
+                <div class="card-body">
+                    <div class="small text-secondary mb-2">{{ issue.year }} год</div>
+                    <h2 class="h5">Том {{ issue.volume }}, № {{ issue.number }}</h2>
+                    <p class="mb-2">{{ issue.title|default:"Выпуск журнала" }}</p>
+                    <p class="small text-secondary mb-3">{{ issue.articles.count }} статей</p>
+                    {% if issue.source_url %}
+                        <a href="{{ issue.source_url }}" class="small text-decoration-none">Источник выпуска</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <p class="text-secondary">Выпуски еще не загружены.</p>
+    {% endfor %}
+</div>
+
+{% include "includes/pagination.html" %}
+{% endblock %}

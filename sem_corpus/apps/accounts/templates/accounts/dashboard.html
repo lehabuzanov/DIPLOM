@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Личный кабинет | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Личный кабинет</h1>
+        <p class="text-secondary mb-0">Сохраненные запросы, подкорпуса и история действий пользователя.</p>
+    </div>
+    {% if request.user.is_staff %}
+        <a class="btn btn-outline-secondary" href="/admin/">Редакторский раздел</a>
+    {% endif %}
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card surface-card h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Профиль</h2>
+                <dl class="small mb-0">
+                    <dt>Пользователь</dt>
+                    <dd>{{ request.user.get_full_name|default:request.user.username }}</dd>
+                    <dt>Email</dt>
+                    <dd>{{ request.user.email|default:"не указан" }}</dd>
+                    <dt>Организация</dt>
+                    <dd>{{ request.user.profile.institution|default:"не указана" }}</dd>
+                    <dt>Роль</dt>
+                    <dd>{{ request.user.profile.primary_role|default:"Исследователь" }}</dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card surface-card h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Сохраненные запросы</h2>
+                <div class="vstack gap-3">
+                    {% for query in saved_queries %}
+                        <div>
+                            <div class="fw-semibold">{{ query.name }}</div>
+                            <div class="small text-secondary">{{ query.last_result_count }} результатов</div>
+                        </div>
+                    {% empty %}
+                        <p class="text-secondary mb-0">Пока нет сохраненных запросов.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card surface-card h-100">
+            <div class="card-body">
+                <h2 class="h5 mb-3">Подкорпуса</h2>
+                <div class="vstack gap-3">
+                    {% for subcorpus in saved_subcorpora %}
+                        <div>
+                            <div class="fw-semibold"><a class="text-decoration-none" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">{{ subcorpus.name }}</a></div>
+                            <div class="small text-secondary">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                        </div>
+                    {% empty %}
+                        <p class="text-secondary mb-0">Сформируйте первый подкорпус из результатов поиска.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card surface-card mt-4">
+    <div class="card-body">
+        <h2 class="h5 mb-3">История действий</h2>
+        <div class="table-responsive">
+            <table class="table align-middle">
+                <thead>
+                    <tr>
+                        <th>Дата</th>
+                        <th>Тип</th>
+                        <th>Описание</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in recent_activity %}
+                        <tr>
+                            <td>{{ item.created_at|date:"d.m.Y H:i" }}</td>
+                            <td>{{ item.get_activity_type_display }}</td>
+                            <td>{{ item.title }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-secondary">История пока пуста.</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

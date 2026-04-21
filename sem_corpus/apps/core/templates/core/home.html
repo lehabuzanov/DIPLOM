@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% load humanize %}
+
+{% block title %}{{ site_short_title }}{% endblock %}
+
+{% block content %}
+<section class="hero-panel mb-4">
+    <div class="p-4 p-lg-5">
+        <div class="row g-4 align-items-center">
+            <div class="col-lg-7">
+                <span class="eyebrow">Цифровой корпусный ресурс</span>
+                <h1 class="display-6 mt-2 mb-3">Корпус научного журнала для хранения, поиска и аналитики текстов</h1>
+                <p class="lead text-secondary mb-4">
+                    Ресурс объединяет выпуски журнала, метаданные публикаций, очищенные тексты статей,
+                    полнотекстовый поиск, подкорпуса и базовые аналитические режимы в едином веб-интерфейсе.
+                </p>
+                <form method="get" action="{% url 'corpus:search' %}" class="row g-2 mb-3">
+                    <div class="col-md-8">
+                        <input type="text" name="text_query" class="form-control form-control-lg" placeholder="Быстрый поиск по корпусу">
+                    </div>
+                    <div class="col-md-4 d-grid">
+                        <button class="btn btn-primary btn-lg" type="submit">Найти</button>
+                    </div>
+                </form>
+                <div class="hero-actions">
+                    <a class="btn btn-outline-primary" href="{% url 'corpus:issue-list' %}">Архив выпусков</a>
+                    <a class="btn btn-outline-primary" href="{% url 'analytics:dashboard' %}">Открыть аналитику</a>
+                    <a class="btn btn-outline-primary" href="{% url 'core:guide' %}">Инструкция пользователя</a>
+                    {% if can_edit_corpus %}
+                        <a class="btn btn-primary" href="{% url 'corpus:editor-upload' %}">Загрузить статью</a>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-lg-5">
+                <div class="row g-3">
+                    <div class="col-6">
+                        <div class="stat-card">
+                            <div class="stat-label">Выпуски</div>
+                            <div class="stat-value">{{ stats.issues }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stat-card">
+                            <div class="stat-label">Статьи</div>
+                            <div class="stat-value">{{ stats.articles }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stat-card">
+                            <div class="stat-label">Авторы</div>
+                            <div class="stat-value">{{ stats.authors }}</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stat-card">
+                            <div class="stat-label">Токены</div>
+                            <div class="stat-value">{{ stats.tokens|intcomma }}</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="quick-panel mt-3">
+                    <h2 class="h5 mb-2">Что можно сделать в корпусе</h2>
+                    <ul class="list-unstyled feature-list mb-0">
+                        <li>Искать статьи по тексту и метаданным одновременно.</li>
+                        <li>Находить словоформы, леммы, фразы и контексты.</li>
+                        <li>Сохранять подкорпуса и повторно использовать выборки.</li>
+                        <li>Сравнивать частотности и смотреть распределения по разделам и годам.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="row g-4 mb-4">
+    <div class="col-lg-8">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h3 mb-0">Последние статьи в корпусе</h2>
+                    <a href="{% url 'corpus:article-list' %}" class="text-decoration-none">Все статьи</a>
+                </div>
+                <div class="vstack gap-3">
+                    {% for article in latest_articles %}
+                        <article class="border-bottom pb-3">
+                            <div class="small text-secondary mb-1">
+                                {{ article.issue.year }} • том {{ article.issue.volume }}, № {{ article.issue.number }}
+                                {% if article.section %} • {{ article.section.name }}{% endif %}
+                            </div>
+                            <h3 class="h5 mb-1"><a class="text-decoration-none" href="{{ article.get_absolute_url }}">{{ article.title }}</a></h3>
+                            <p class="mb-1 text-secondary">{{ article.author_line }}</p>
+                            <p class="mb-0">{{ article.abstract|truncatechars:220 }}</p>
+                        </article>
+                    {% empty %}
+                        <p class="mb-0 text-secondary">Корпус пока не наполнен статьями.</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h3 mb-3">Структура корпуса</h2>
+                <p class="text-secondary">
+                    Метаданные и тексты организованы по выпускам, разделам журнала и авторам,
+                    что позволяет формировать устойчивые исследовательские выборки.
+                </p>
+                <div>
+                    {% for section in sections_overview %}
+                        <span class="section-chip">{{ section.name }}: {{ section.total }}</span>
+                    {% empty %}
+                        <span class="text-secondary">Разделы появятся после загрузки статей.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<section class="card surface-card">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <div>
+                <h2 class="h3 mb-1">Динамика публикаций по годам</h2>
+                <p class="text-secondary mb-0">Общая статистика по корпусу для быстрой ориентации в массиве данных.</p>
+            </div>
+            <a href="{% url 'analytics:dashboard' %}" class="text-decoration-none">Открыть аналитику</a>
+        </div>
+        <canvas id="homeYearsChart" height="110"></canvas>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const yearLabels = [{% for row in articles_per_year %}"{{ row.issue__year }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const yearData = [{% for row in articles_per_year %}{{ row.total }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const yearsChart = document.getElementById('homeYearsChart');
+    if (yearsChart) {
+        new Chart(yearsChart, {
+            type: 'bar',
+            data: {
+                labels: yearLabels,
+                datasets: [{
+                    label: 'Количество статей',
+                    data: yearData,
+                    backgroundColor: '#006798',
+                    borderRadius: 6,
+                }]
+            },
+            options: {
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { precision: 0 } }
+                }
+            }
+        });
+    }
+</script>
+{% endblock %}

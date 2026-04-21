@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Поиск | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="h2 mb-2">Поиск по корпусу</h1>
+    <p class="mb-0">
+        Используйте текстовый запрос и фильтры по метаданным, чтобы найти публикации,
+        контексты употребления и сформировать исследовательскую выборку.
+    </p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card surface-card sticky-top" style="top: 1rem;">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Параметры поиска</h2>
+                <form method="get" class="vstack gap-3">
+                    {{ search_form.as_p }}
+                    <button class="btn btn-primary" type="submit">Найти</button>
+                    <a class="btn btn-link text-decoration-none px-0" href="{% url 'corpus:search' %}">Сбросить фильтры</a>
+                </form>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <div>
+                <h2 class="h3 mb-1">Результаты поиска</h2>
+                <p class="text-secondary mb-0">Найдено: {{ result_count }}</p>
+            </div>
+            {% if results %}
+                <a class="btn btn-outline-primary" href="{% url 'corpus:search-export-csv' %}?{{ request.GET.urlencode }}">Экспорт CSV</a>
+            {% endif %}
+        </div>
+
+        {% if request.user.is_authenticated and results %}
+            <div class="row g-3 mb-4">
+                <div class="col-lg-6">
+                    <div class="card surface-card h-100">
+                        <div class="card-body">
+                            <h3 class="h5 mb-3">Сохранить запрос</h3>
+                            <form method="post" action="{% url 'corpus:save-query' %}" class="vstack gap-2">
+                                {% csrf_token %}
+                                {{ save_query_form.as_p }}
+                                <button class="btn btn-sm btn-primary" type="submit">Сохранить</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-6">
+                    <div class="card surface-card h-100">
+                        <div class="card-body">
+                            <h3 class="h5 mb-3">Сформировать подкорпус</h3>
+                            <form method="post" action="{% url 'corpus:subcorpus-create' %}" class="vstack gap-2">
+                                {% csrf_token %}
+                                {{ subcorpus_form.as_p }}
+                                <button class="btn btn-sm btn-primary" type="submit">Сохранить подкорпус</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="vstack gap-3">
+            {% for result in results %}
+                <article class="card surface-card">
+                    <div class="card-body p-4">
+                        <div class="small text-secondary mb-2">
+                            {{ result.article.issue.year }}
+                            {% if result.article.section %} • {{ result.article.section.name }}{% endif %}
+                            {% if result.rank %} • релевантность {{ result.rank }}{% endif %}
+                        </div>
+                        <h3 class="h5"><a class="text-decoration-none" href="{{ result.article.get_absolute_url }}">{{ result.article.title }}</a></h3>
+                        <p class="mb-2 text-secondary">{{ result.article.author_line }}</p>
+                        <div class="small text-secondary mb-2">Совпадений: {{ result.hit_count }}</div>
+                        <div class="vstack gap-2">
+                            {% for context in result.contexts %}
+                                <div class="context-line">{{ context|safe }}</div>
+                            {% empty %}
+                                <div class="text-secondary small">Статья соответствует заданным фильтрам.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </article>
+            {% empty %}
+                <div class="card surface-card">
+                    <div class="card-body text-secondary p-4">
+                        Задайте поисковый запрос или примените фильтры по метаданным, чтобы получить результаты.
+                    </div>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endblock %}

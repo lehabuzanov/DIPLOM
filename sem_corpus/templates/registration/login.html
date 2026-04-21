@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+
+{% block title %}Вход | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-5">
+        <div class="card shadow-sm border-0 surface-card">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h3 mb-3">Вход в систему</h1>
+                <p class="text-secondary">Авторизуйтесь, чтобы сохранять запросы, подкорпуса и результаты анализа.</p>
+                <form method="post" class="vstack gap-3">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button class="btn btn-primary" type="submit">Войти</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <h1 class="h2 mb-2">Аналитика корпуса</h1>
+    <p class="mb-0">
+        Частотные списки, распределение публикаций по годам и разделам, биграммы
+        и сравнение подкорпусов доступны в едином аналитическом режиме.
+    </p>
+</div>
+
+<div class="card surface-card mb-4">
+    <div class="card-body p-4">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">{{ form.subcorpus.label_tag }}{{ form.subcorpus }}</div>
+            <div class="col-md-3">{{ form.mode.label_tag }}{{ form.mode }}</div>
+            <div class="col-md-3">{{ form.left_subcorpus.label_tag }}{{ form.left_subcorpus }}</div>
+            <div class="col-md-3">{{ form.right_subcorpus.label_tag }}{{ form.right_subcorpus }}</div>
+            <div class="col-12">
+                <button class="btn btn-primary" type="submit">Обновить аналитику</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <div class="col-lg-6">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Статьи по годам</h2>
+                <canvas id="articlesYearsChart" height="160"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Статьи по разделам</h2>
+                <canvas id="articlesSectionsChart" height="160"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-6">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Частотный список</h2>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Единица</th>
+                                <th class="text-end">Частота</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in frequency_rows %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td class="text-end">{{ row.count }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-6">
+        <div class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Биграммы</h2>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Сочетание</th>
+                                <th class="text-end">Частота</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in bigram_rows %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td class="text-end">{{ row.count }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card surface-card mt-4">
+    <div class="card-body p-4">
+        <h2 class="h4 mb-3">Сравнение двух подкорпусов</h2>
+        <div class="table-responsive">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Лемма</th>
+                        <th class="text-end">Подкорпус A</th>
+                        <th class="text-end">Подкорпус B</th>
+                        <th class="text-end">Разница</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in comparison_rows %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td class="text-end">{{ row.left_count }}</td>
+                            <td class="text-end">{{ row.right_count }}</td>
+                            <td class="text-end">{{ row.delta }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr><td colspan="4" class="text-secondary">Выберите два подкорпуса для сравнения.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const yearLabels = [{% for row in articles_per_year %}"{{ row.issue__year }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const yearTotals = [{% for row in articles_per_year %}{{ row.total }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const sectionLabels = [{% for row in articles_per_section %}"{{ row.name }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
+    const sectionTotals = [{% for row in articles_per_section %}{{ row.total }}{% if not forloop.last %}, {% endif %}{% endfor %}];
+
+    new Chart(document.getElementById('articlesYearsChart'), {
+        type: 'line',
+        data: {
+            labels: yearLabels,
+            datasets: [{
+                label: 'Статьи',
+                data: yearTotals,
+                fill: false,
+                borderColor: '#006798',
+                tension: 0.2
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+
+    new Chart(document.getElementById('articlesSectionsChart'), {
+        type: 'bar',
+        data: {
+            labels: sectionLabels,
+            datasets: [{
+                label: 'Статьи',
+                data: sectionTotals,
+                backgroundColor: '#008acb',
+                borderRadius: 6
+            }]
+        },
+        options: {
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+</script>
+{% endblock %}

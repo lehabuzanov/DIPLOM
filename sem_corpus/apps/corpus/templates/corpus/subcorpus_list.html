@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Подкорпуса | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Сохраненные подкорпуса</h1>
+        <p class="text-secondary mb-0">Повторное использование отобранных текстовых массивов.</p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'corpus:search' %}">Сформировать новый</a>
+</div>
+
+<div class="row g-4">
+    {% for subcorpus in subcorpora %}
+        <div class="col-lg-6">
+            <div class="card surface-card h-100">
+                <div class="card-body">
+                    <h2 class="h5"><a class="text-decoration-none" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">{{ subcorpus.name }}</a></h2>
+                    <p class="text-secondary">{{ subcorpus.description|default:"Описание не указано." }}</p>
+                    <div class="small text-secondary">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <p class="text-secondary">Подкорпуса пока не созданы.</p>
+    {% endfor %}
+</div>
+
+{% include "includes/pagination.html" %}
+{% endblock %}

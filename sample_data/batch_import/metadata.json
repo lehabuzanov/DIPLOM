@@ -1,0 +1,61 @@
+{
+  "journal": {
+    "title": "Научный журнал «Социально-экономическое управление: теория и практика»",
+    "short_title": "Социально-экономическое управление: теория и практика",
+    "publisher": "ИжГТУ имени М. Т. Калашникова",
+    "description": "Пакет демонстрационного импорта корпуса.",
+    "site_url": "https://izdat.istu.ru/index.php/social-economic-management"
+  },
+  "articles": [
+    {
+      "slug": "batch-import-urban-data-2025",
+      "title": "Интеграция городских данных в систему социально-экономического мониторинга",
+      "year": 2025,
+      "volume": "21",
+      "number": "2",
+      "issue_title": "Новые методы мониторинга и аналитики",
+      "section": "Цифровая экономика",
+      "language": "ru",
+      "pages": "40-48",
+      "doi": "10.12345/sem.2025.2.01",
+      "abstract": "Статья демонстрирует сценарий пакетного импорта материалов нового выпуска в электронный корпус журнала.",
+      "keywords": ["городские данные", "мониторинг", "аналитика", "импорт"],
+      "text_file": "texts/urban_data_monitoring.txt",
+      "source_file": "source_files/urban_data_monitoring.txt",
+      "original_url": "https://izdat.istu.ru/index.php/social-economic-management",
+      "authors": [
+        {
+          "first_name": "Андрей",
+          "last_name": "Федоров",
+          "middle_name": "Алексеевич",
+          "affiliation": "ИжГТУ имени М. Т. Калашникова"
+        }
+      ]
+    },
+    {
+      "slug": "batch-import-corpus-annotation-2025",
+      "title": "Аннотирование научных текстов для задач корпусного поиска и повторного использования данных",
+      "year": 2025,
+      "volume": "21",
+      "number": "2",
+      "issue_title": "Новые методы мониторинга и аналитики",
+      "section": "Лингвистика и цифровые исследования",
+      "language": "ru",
+      "pages": "49-58",
+      "doi": "10.12345/sem.2025.2.02",
+      "abstract": "Материал описывает подготовку очищенного текста и метаданных для последующего корпусного анализа.",
+      "keywords": ["аннотирование", "очищенный текст", "корпус", "лемматизация"],
+      "text_file": "texts/corpus_annotation.txt",
+      "source_file": "source_files/corpus_annotation.txt",
+      "original_url": "https://izdat.istu.ru/index.php/social-economic-management",
+      "authors": [
+        {
+          "first_name": "Ирина",
+          "last_name": "Степанова",
+          "middle_name": "Николаевна",
+          "affiliation": "Удмуртский государственный университет"
+        }
+      ]
+    }
+  ]
+}
