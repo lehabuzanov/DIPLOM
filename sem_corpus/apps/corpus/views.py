@@ -5,6 +5,7 @@ from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.text import slugify
@@ -243,6 +244,15 @@ class ArticleListView(ListView):
         )
         if self.form.is_valid():
             queryset = apply_article_filters(queryset, self.form.cleaned_data)
+            if text_query := (self.form.cleaned_data.get("text_query") or "").strip():
+                queryset = queryset.filter(
+                    Q(title__icontains=text_query)
+                    | Q(abstract__icontains=text_query)
+                    | Q(text__cleaned_text__icontains=text_query)
+                    | Q(keywords__normalized__icontains=text_query.lower())
+                    | Q(article_authors__display_name__icontains=text_query)
+                    | Q(article_authors__author__last_name__icontains=text_query)
+                )
             if title := self.form.cleaned_data.get("title"):
                 queryset = queryset.filter(title__icontains=title)
         return queryset.distinct()

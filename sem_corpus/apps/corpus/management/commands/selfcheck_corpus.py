@@ -63,7 +63,6 @@ class Command(BaseCommand):
             ("Article catalog", "corpus:article-list"),
             ("Search", "corpus:search"),
             ("Analytics", "analytics:dashboard"),
-            ("Tag cloud", "analytics:tag-cloud"),
         ]:
             response = client.get(reverse(url_name))
             check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")

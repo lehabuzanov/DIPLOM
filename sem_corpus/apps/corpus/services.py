@@ -25,6 +25,23 @@ from sem_corpus.apps.corpus.models import (
     SearchHistory,
 )
 
+FREQUENCY_STOPWORDS = {
+    "a", "an", "and", "as", "at", "by", "for", "from", "in", "into", "is", "it", "of", "on", "or", "that", "the",
+    "to", "with", "we", "our", "this", "these", "those", "be", "are", "was", "were", "has", "have",
+    "doi", "edn", "issn", "www", "http", "https", "com", "org", "rus", "russ", "et", "al",
+    "и", "в", "во", "не", "что", "он", "на", "я", "с", "со", "как", "а", "то", "все", "она", "так", "его", "но",
+    "да", "ты", "к", "у", "же", "вы", "за", "бы", "по", "только", "ее", "мне", "было", "вот", "от", "меня", "еще",
+    "нет", "о", "из", "ему", "теперь", "когда", "даже", "ну", "ли", "если", "уже", "или", "ни", "быть", "был",
+    "него", "до", "вас", "опять", "уж", "вам", "ведь", "там", "потом", "себя", "ничего", "ей", "может", "они",
+    "тут", "где", "есть", "надо", "ней", "для", "мы", "их", "чем", "была", "сам", "чтоб", "без", "чего", "раз",
+    "тоже", "себе", "под", "будет", "тогда", "кто", "этот", "того", "потому", "этого", "какой", "совсем", "ним",
+    "здесь", "этом", "один", "почти", "мой", "тем", "чтобы", "нее", "сейчас", "были", "куда", "зачем", "всех",
+    "можно", "при", "наконец", "два", "об", "другой", "после", "над", "больше", "тот", "через", "эти", "нас",
+    "про", "них", "какая", "много", "три", "эту", "этой", "перед", "иногда", "чуть", "том", "нельзя", "такой",
+}
+
+FREQUENCY_BLOCKED_PREFIXES = ("10.", "№", "рис", "табл")
+
 
 @lru_cache(maxsize=1)
 def get_morph_analyzer() -> MorphAnalyzer:
@@ -394,21 +411,45 @@ def get_frequency_data(articles_queryset, mode: str = "lemma", limit: int = 25):
     return rows[:limit]
 
 
+def is_meaningful_frequency_label(label: str) -> bool:
+    if not label:
+        return False
+    normalized = label.strip().lower()
+    if len(normalized) < 3:
+        return False
+    if normalized in FREQUENCY_STOPWORDS:
+        return False
+    if any(normalized.startswith(prefix) for prefix in FREQUENCY_BLOCKED_PREFIXES):
+        return False
+    if any(char.isdigit() for char in normalized):
+        return False
+    if not normalized.replace("-", "").isalpha():
+        return False
+    return True
+
+
 def get_frequency_counts(articles_queryset, mode: str = "lemma"):
+
     if mode == "word":
         rows = (
             ArticleToken.objects.filter(article__in=articles_queryset, is_alpha=True)
+            .exclude(source_section=ArticleToken.SECTION_REFERENCES)
             .values("normalized")
             .annotate(total=Count("id"))
         )
-        return {row["normalized"]: row["total"] for row in rows if row["normalized"]}
+        return {row["normalized"]: row["total"] for row in rows if is_meaningful_frequency_label(row["normalized"])}
 
     rows = (
         ArticleToken.objects.filter(article__in=articles_queryset, lemma__isnull=False)
+        .exclude(source_section=ArticleToken.SECTION_REFERENCES)
         .values("lemma__normalized")
         .annotate(total=Count("id"))
     )
-    return {row["lemma__normalized"]: row["total"] for row in rows if row["lemma__normalized"]}
+    return {
+        row["lemma__normalized"]: row["total"]
+        for row in rows
+        if is_meaningful_frequency_label(row["lemma__normalized"])
+    }
 
 
 def get_bigram_data(articles_queryset, limit: int = 20):
@@ -416,13 +457,15 @@ def get_bigram_data(articles_queryset, limit: int = 20):
     previous_token = {}
     token_rows = (
         ArticleToken.objects.filter(article__in=articles_queryset, is_alpha=True)
+        .exclude(source_section=ArticleToken.SECTION_REFERENCES)
         .select_related("lemma")
         .order_by("article_id", "position")
         .iterator(chunk_size=2000)
     )
     for token in token_rows:
         label = token.lemma.normalized if token.lemma_id else token.normalized
-        if not label:
+        if not is_meaningful_frequency_label(label):
+            previous_token[token.article_id] = None
             continue
         prior = previous_token.get(token.article_id)
         if prior:

@@ -16,19 +16,16 @@
 <body>
     <div class="site-shell">
         <header class="site-header">
-            <div class="topline">
-                <div class="container d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-2 py-2">
-                    <div class="small fw-semibold">{{ university_name }}</div>
-                    <div class="small d-flex flex-wrap gap-3">
-                        <a href="{{ journal_base_url }}" class="text-decoration-none">Сайт журнала</a>
-                        <a href="{% url 'core:guide' %}" class="text-decoration-none">Инструкция пользователя</a>
-                    </div>
-                </div>
-            </div>
             <div class="brandbar">
                 <div class="container brandbar-inner">
+                    <div class="brandbar-top">
+                        <div class="brand-caption">{{ university_name }}</div>
+                        <div class="brand-links">
+                            <a href="{{ journal_base_url }}">Сайт журнала</a>
+                            <a href="{% url 'core:guide' %}">Инструкция пользователя</a>
+                        </div>
+                    </div>
                     <div class="brand-lockup">
-                        <div class="brand-overline">ИжГТУ имени М. Т. Калашникова</div>
                         <a class="brand-title text-decoration-none" href="{% url 'core:home' %}">
                             Электронный корпус журнала «Социально-экономическое управление: теория и практика»
                         </a>
@@ -47,7 +44,6 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:article-list' %}">Статьи</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:search' %}">Поиск</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'analytics:dashboard' %}">Аналитика</a></li>
-                            <li class="nav-item"><a class="nav-link" href="{% url 'analytics:tag-cloud' %}">Облако тегов</a></li>
                             {% if request.user.is_authenticated %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'corpus:subcorpus-list' %}">Подкорпуса</a></li>
                             {% endif %}

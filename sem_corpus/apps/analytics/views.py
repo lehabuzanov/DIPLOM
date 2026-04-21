@@ -1,10 +1,10 @@
 import re
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.views.generic import TemplateView
 
 from sem_corpus.apps.analytics.forms import AnalyticsForm
-from sem_corpus.apps.corpus.models import Article, Keyword, SavedSubcorpus, Section
+from sem_corpus.apps.corpus.models import Article, Author, Keyword, SavedSubcorpus
 from sem_corpus.apps.corpus.services import compare_frequency_sets, get_bigram_data, get_frequency_counts, get_frequency_data
 
 
@@ -79,9 +79,14 @@ class AnalyticsDashboardView(TemplateView):
         context["articles_per_year"] = list(
             base_articles.values("issue__year").annotate(total=Count("id")).order_by("issue__year")
         )
-        context["articles_per_section"] = list(
-            Section.objects.annotate(total=Count("articles")).values("name", "total").order_by("-total")
-        )
+        context["top_authors"] = [
+            {"label": author.full_name, "total": author.total}
+            for author in Author.objects.annotate(
+                total=Count("articles", filter=Q(articles__is_published=True), distinct=True)
+            )
+            .filter(total__gt=0)
+            .order_by("-total", "last_name", "first_name", "middle_name")[:10]
+        ]
         context["public_subcorpora"] = SavedSubcorpus.objects.filter(is_public=True)[:6]
         return context
 
