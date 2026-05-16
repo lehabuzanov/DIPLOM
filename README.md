@@ -1,47 +1,45 @@
 # Электронный корпус журнала «Социально-экономическое управление: теория и практика»
 
-Веб-приложение на `Python + Django + PostgreSQL` для хранения, структурирования, поиска, анализа и повторного использования текстов научного журнала ИжГТУ имени М. Т. Калашникова.
-
-## Архитектура
-
-- Backend: `Django`
-- Основная СУБД: `PostgreSQL`
-- Интерфейс: `Django templates + Bootstrap 5`
-- Аналитика: `Chart.js`
-- Лингвистическая обработка: `razdel + pymorphy3`
-- Импорт архива журнала: `requests + BeautifulSoup + pypdf`
+Веб-приложение на `Python + Django + PostgreSQL` для хранения, поиска, анализа и повторного использования текстов научного журнала ИжГТУ имени М. Т. Калашникова.
 
 ## Что реализовано
 
 - каталог выпусков и статей;
-- карточка статьи с метаданными, аннотацией, файлами и очищенным текстом;
+- карточка статьи с метаданными, текстом и доступом к файлу;
 - поиск по метаданным;
 - полнотекстовый поиск;
 - поиск по словоформе, лемме и фразе;
-- сохранение запросов;
-- сохранение подкорпусов;
-- частотные списки, биграммы и сравнение статей или подкорпусов;
-- ручная загрузка статьи через редакторский интерфейс;
-- пакетный импорт;
-- синхронизация архива журнала из OJS;
-- самопроверка ключевых страниц и сценариев.
+- сохраненные запросы с повторным открытием, редактированием и удалением;
+- подкорпуса с обновлением состава, редактированием и удалением;
+- частотные списки, биграммы и сравнение материалов;
+- ручная загрузка статьи для редактора;
+- синхронизация архива журнала с OJS;
+- восстановление пропущенных текстов из PDF;
+- встроенная самопроверка ключевых страниц и функций.
 
-## Структура проекта
+## Текущее состояние корпуса
 
-- `sem_corpus/config/` — настройки Django.
-- `sem_corpus/apps/core/` — главная страница, страницы «О корпусе» и инструкции.
-- `sem_corpus/apps/accounts/` — регистрация, кабинет, роли и история действий.
-- `sem_corpus/apps/corpus/` — модели корпуса, поиск, импорт, подкорпуса, редакторская загрузка.
-- `sem_corpus/apps/analytics/` — частотность, графики и сравнение материалов.
-- `sample_data/` — данные для пакетного импорта.
-- `docs/` — техническая и пользовательская документация.
+- в архив импортировано `21` выпуск;
+- в корпусе `265` опубликованных статей;
+- тексты извлечены для всех `265` статей;
+- если локальный PDF недоступен, ссылка на файл статьи автоматически ведет на рабочий внешний URL журнала.
+
+## Архитектура
+
+- Backend: `Django`
+- База данных: `PostgreSQL`
+- Интерфейс: `Django templates + Bootstrap 5`
+- Аналитика: `Chart.js`
+- Токенизация: `razdel`
+- Лемматизация: `pymorphy3 + simplemma`
+- Импорт архива: `requests + BeautifulSoup + pypdf`
 
 ## Быстрый запуск через Docker
 
 1. Скопируйте `.env.example` в `.env`.
-2. Запустите:
+2. Запустите проект:
 
-```bash
+```powershell
 docker compose up --build
 ```
 
@@ -51,63 +49,102 @@ docker compose up --build
 http://127.0.0.1:8000/
 ```
 
-При первом запуске контейнер:
+Фоновый запуск:
 
-- установит зависимости;
-- выполнит миграции;
-- очистит старый демо-контент;
-- создаст служебные роли и пользователей.
-
-После того как сайт уже поднялся, архив журнала можно подтянуть вручную:
-
-```bash
-docker compose exec web python manage.py sync_ojs_journal --skip-existing
+```powershell
+docker compose up -d --build
 ```
 
-## Остановка приложения
+Остановка:
 
-```bash
+```powershell
 docker compose down
 ```
 
-Если нужно остановить и удалить тома базы данных и media:
+Полная остановка с удалением томов БД и media:
 
-```bash
+```powershell
 docker compose down -v
 ```
 
-## Локальный запуск через Python и PostgreSQL
+## Что происходит при запуске Docker
 
-1. Создайте базу PostgreSQL `sem_corpus`.
-2. Скопируйте `.env.example` в `.env` и укажите параметры подключения.
-3. Создайте виртуальное окружение и установите зависимости:
+Контейнер `web` автоматически:
 
-```bash
-python -m venv .venv
-.venv\Scripts\activate
-python -m pip install -r requirements.txt
+- устанавливает зависимости;
+- применяет миграции;
+- удаляет старый демонстрационный контент;
+- создает служебные роли и учетные записи;
+- поднимает сайт на `8000` порту.
+
+## Загрузка полного архива журнала
+
+После запуска сайта выполните:
+
+```powershell
+docker compose exec web python manage.py sync_ojs_journal --skip-existing
 ```
 
-4. Выполните миграции и подготовьте базовые записи:
+Эта команда:
 
-```bash
-python manage.py migrate
-python manage.py purge_demo_content
-python manage.py seed_demo_data
-python manage.py sync_ojs_journal --skip-existing
+- проходит по архиву OJS журнала;
+- добавляет новые выпуски и статьи;
+- загружает PDF;
+- извлекает текст и строит поисковый индекс.
+
+## Восстановление текстов из PDF
+
+Если какие-то статьи были импортированы без текста, выполните:
+
+```powershell
+docker compose exec web python manage.py repair_article_texts
 ```
 
-5. Запустите сервер:
+После доработки проекта эта команда уже успешно восстановила тексты для всех статей корпуса.
 
-```bash
-python manage.py runserver
+## Самопроверка
+
+Проверка ключевых функций:
+
+```powershell
+docker compose exec web python manage.py selfcheck_corpus
 ```
 
-## Где загружать статью
+Проверка структуры Django:
 
-После входа под редактором или администратором в верхнем меню появляется пункт `Загрузка статьи`.
+```powershell
+python manage.py check
+```
 
-Прямой адрес формы:
+## Автодобавление новых статей
+
+Для автоматического пополнения корпуса подходит команда:
+
+```powershell
+docker compose exec web python manage.py sync_ojs_journal --skip-existing
+```
+
+Рекомендуемый способ внедрения:
+
+- развернуть проект на сервере;
+- запускать эту команду по расписанию через `cron`, `systemd timer` или планировщик задач;
+- после синхронизации при необходимости запускать `repair_article_texts`.
+
+Важно:
+
+- текущий механизм рассчитан на сайт журнала на OJS;
+- он будет работать стабильно, пока сохраняются архивная страница, ссылки на выпуски и метатеги статей;
+- если тема OJS или HTML-разметка сайта журнала сильно изменится, парсер нужно будет быстро адаптировать.
+
+## Где загружать статью вручную
+
+После входа под редактором или администратором в верхнем меню доступен пункт:
+
+```text
+Загрузка статьи
+```
+
+Прямой адрес:
 
 ```text
 /corpus/articles/upload/
@@ -119,13 +156,7 @@ python manage.py runserver
 /admin/
 ```
 
-## Самопроверка
-
-```bash
-python manage.py selfcheck_corpus
-```
-
-## Служебные учётные записи
+## Служебные учетные записи
 
 - `researcher` / `research123`
 - `editor` / `editor123`
@@ -133,11 +164,43 @@ python manage.py selfcheck_corpus
 
 ## Полезные команды
 
-```bash
+```powershell
+docker compose exec web python manage.py sync_ojs_journal --skip-existing
+docker compose exec web python manage.py repair_article_texts
+docker compose exec web python manage.py rebuild_corpus_index
+docker compose exec web python manage.py selfcheck_corpus
+docker compose exec web python manage.py import_corpus_batch --source sample_data/batch_import
+```
+
+## Локальный запуск без Docker
+
+1. Создайте БД PostgreSQL `sem_corpus`.
+2. Скопируйте `.env.example` в `.env` и укажите параметры подключения.
+3. Создайте виртуальное окружение и установите зависимости:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -r requirements.txt
+```
+
+4. Примените миграции и подготовьте служебные записи:
+
+```powershell
+python manage.py migrate
 python manage.py purge_demo_content
 python manage.py seed_demo_data
-python manage.py import_corpus_batch --source sample_data/batch_import
+```
+
+5. Импортируйте архив:
+
+```powershell
 python manage.py sync_ojs_journal --skip-existing
-python manage.py rebuild_corpus_index
-python manage.py selfcheck_corpus
+python manage.py repair_article_texts
+```
+
+6. Запустите сервер:
+
+```powershell
+python manage.py runserver
 ```

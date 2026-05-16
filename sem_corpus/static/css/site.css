@@ -456,6 +456,21 @@ label {
     margin-top: 0.25rem;
 }
 
+.inline-help-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    background: #e4eef7;
+    color: #20486d;
+    font-size: 0.82rem;
+    font-weight: 700;
+    cursor: help;
+    border: 1px solid #bfd3e3;
+}
+
 .table > :not(caption) > * > * {
     border-bottom-color: #dfe9f0;
 }

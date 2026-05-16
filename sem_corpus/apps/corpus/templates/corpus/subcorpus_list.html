@@ -6,24 +6,56 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <div>
         <h1 class="h2 mb-1">Сохраненные подкорпуса</h1>
-        <p class="text-secondary mb-0">Повторное использование отобранных текстовых массивов.</p>
+        <p class="text-secondary mb-0">Повторное использование исследовательских выборок с возможностью обновления состава.</p>
     </div>
     <a class="btn btn-primary" href="{% url 'corpus:search' %}">Сформировать новый</a>
 </div>
 
 <div class="row g-4">
     {% for subcorpus in subcorpora %}
-        <div class="col-lg-6">
+        <div class="col-xl-6">
             <div class="card surface-card h-100">
-                <div class="card-body">
-                    <h2 class="h5"><a class="text-decoration-none" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">{{ subcorpus.name }}</a></h2>
-                    <p class="text-secondary">{{ subcorpus.description|default:"Описание не указано." }}</p>
-                    <div class="small text-secondary">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                <div class="card-body p-4">
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                        <div>
+                            <h2 class="h5 mb-1"><a class="text-decoration-none" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">{{ subcorpus.name }}</a></h2>
+                            <p class="text-secondary mb-0">{{ subcorpus.description|default:"Описание не указано." }}</p>
+                        </div>
+                        {% if subcorpus.is_public %}
+                            <span class="badge text-bg-light border">Публичный</span>
+                        {% endif %}
+                    </div>
+                    <div class="small text-secondary mb-3">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                    {% if subcorpus.summary_items %}
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            {% for item in subcorpus.summary_items %}
+                                <span class="badge text-bg-light border">{{ item }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-primary" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">Открыть</a>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Аналитика</a>
+                        {% if subcorpus.has_filter_payload %}
+                            <a class="btn btn-sm btn-outline-secondary" href="{{ subcorpus.get_source_search_url }}">Изменить условия</a>
+                        {% endif %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:subcorpus-edit' subcorpus.pk %}">Параметры</a>
+                        <form method="post" action="{% url 'corpus:subcorpus-delete' subcorpus.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+                        </form>
+                    </div>
                 </div>
             </div>
         </div>
     {% empty %}
-        <p class="text-secondary">Подкорпуса пока не созданы.</p>
+        <div class="col-12">
+            <div class="card surface-card">
+                <div class="card-body text-secondary p-4">
+                    Подкорпуса пока не созданы. Откройте поиск, задайте условия и сохраните выборку.
+                </div>
+            </div>
+        </div>
     {% endfor %}
 </div>
 

@@ -6,8 +6,23 @@ from django.contrib.postgres.search import SearchVectorField
 from django.db import models
 from django.db.models import Sum
 from django.urls import reverse
+from urllib.parse import urlencode
 
 from sem_corpus.apps.core.models import TimestampedModel
+
+
+def payload_to_querystring(payload: dict | None) -> str:
+    if not payload:
+        return ""
+    serialized: dict[str, str | list[str]] = {}
+    for key, value in payload.items():
+        if value in ("", None, []):
+            continue
+        if isinstance(value, (list, tuple)):
+            serialized[key] = [str(item) for item in value if item not in ("", None)]
+        else:
+            serialized[key] = str(value)
+    return urlencode(serialized, doseq=True)
 
 
 class PublishedArticleQuerySet(models.QuerySet):
@@ -366,6 +381,12 @@ class SavedQuery(TimestampedModel):
     def __str__(self) -> str:
         return self.name
 
+    def get_search_url(self) -> str:
+        base_url = reverse("corpus:search")
+        querystring = payload_to_querystring(self.query_payload)
+        suffix = f"{querystring}&saved_query={self.pk}" if querystring else f"saved_query={self.pk}"
+        return f"{base_url}?{suffix}"
+
 
 class SavedSubcorpus(TimestampedModel):
     user = models.ForeignKey(
@@ -396,10 +417,9 @@ class SavedSubcorpus(TimestampedModel):
         return self.name
 
     def refresh_membership(self):
-        from sem_corpus.apps.corpus.services import apply_article_filters
+        from sem_corpus.apps.corpus.services import resolve_articles_for_saved_payload
 
-        base_queryset = Article.objects.published().select_related("text")
-        filtered_articles = apply_article_filters(base_queryset, self.filter_payload).distinct()
+        filtered_articles = resolve_articles_for_saved_payload(self.filter_payload)
         SavedSubcorpusArticle.objects.filter(subcorpus=self, source=SavedSubcorpusArticle.SOURCE_FILTER).delete()
         SavedSubcorpusArticle.objects.bulk_create(
             [
@@ -417,6 +437,16 @@ class SavedSubcorpus(TimestampedModel):
             self.articles.select_related("text").aggregate(total=Sum("text__token_count")).get("total") or 0
         )
         self.save(update_fields=["article_count", "token_count", "updated_at"])
+
+    @property
+    def has_filter_payload(self) -> bool:
+        return any(value not in ("", None, []) for value in (self.filter_payload or {}).values())
+
+    def get_source_search_url(self) -> str:
+        base_url = reverse("corpus:search")
+        querystring = payload_to_querystring(self.filter_payload)
+        suffix = f"{querystring}&subcorpus={self.pk}" if querystring else f"subcorpus={self.pk}"
+        return f"{base_url}?{suffix}"
 
 
 class SavedSubcorpusArticle(TimestampedModel):

@@ -6,7 +6,7 @@ from pathlib import Path
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.db.models import Q
-from django.http import HttpResponse
+from django.http import FileResponse, Http404, HttpResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.text import slugify
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
@@ -16,6 +16,7 @@ from sem_corpus.apps.corpus.forms import (
     AddToSubcorpusForm,
     EditorArticleUploadForm,
     SaveQueryForm,
+    SavedQueryEditForm,
     SavedSubcorpusForm,
     SearchForm,
 )
@@ -28,19 +29,26 @@ from sem_corpus.apps.corpus.models import (
     Author,
     Issue,
     Journal,
+    SavedQuery,
     SavedSubcorpus,
+    SearchHistory,
     Section,
+    payload_to_querystring,
 )
 from sem_corpus.apps.corpus.services import (
     add_article_to_subcorpus,
     apply_article_filters,
     build_subcorpus,
     deserialize_payload,
+    describe_query_payload,
     export_search_results_csv,
+    refresh_subcorpus_totals,
     save_query,
     search_articles,
     serialize_querydict,
     sync_keywords_for_article,
+    update_saved_query,
+    update_saved_subcorpus,
 )
 
 
@@ -222,6 +230,13 @@ class EditorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         return user_can_edit_corpus(self.request.user)
 
 
+class UserOwnedObjectMixin(LoginRequiredMixin):
+    model = None
+
+    def get_object(self):
+        return get_object_or_404(self.model, pk=self.kwargs["pk"], user=self.request.user)
+
+
 class IssueListView(ListView):
     template_name = "corpus/issue_list.html"
     context_object_name = "issues"
@@ -279,6 +294,7 @@ class ArticleDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         article = self.object
+        context["article_text"] = getattr(article, "text", None)
         context["related_articles"] = (
             Article.objects.published()
             .filter(section=article.section)
@@ -293,10 +309,28 @@ class ArticleDetailView(DetailView):
 class SearchView(TemplateView):
     template_name = "corpus/search.html"
 
+    def get_saved_query(self):
+        if not self.request.user.is_authenticated:
+            return None
+        saved_query_id = self.request.GET.get("saved_query")
+        if not saved_query_id:
+            return None
+        return SavedQuery.objects.filter(pk=saved_query_id, user=self.request.user).first()
+
+    def get_saved_subcorpus(self):
+        if not self.request.user.is_authenticated:
+            return None
+        subcorpus_id = self.request.GET.get("subcorpus")
+        if not subcorpus_id:
+            return None
+        return SavedSubcorpus.objects.filter(pk=subcorpus_id, user=self.request.user).first()
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         form = SearchForm(self.request.GET or None)
         results = []
+        saved_query = self.get_saved_query()
+        saved_subcorpus = self.get_saved_subcorpus()
         if form.is_valid() and any(value for value in form.cleaned_data.values() if value not in (None, "", [])):
             results = search_articles(form, user=self.request.user)
         context["search_form"] = form
@@ -305,15 +339,38 @@ class SearchView(TemplateView):
         initial_name = ""
         if form.is_bound and form.is_valid():
             initial_name = form.cleaned_data.get("text_query") or "Запрос по метаданным"
+        if saved_query:
+            initial_name = saved_query.name
         context["save_query_form"] = SaveQueryForm(
             initial={
-                "name": initial_name,
+                "query_id": saved_query.pk if saved_query else "",
+                "name": saved_query.name if saved_query else initial_name,
+                "description": saved_query.description if saved_query else "",
                 "serialized_query": serialize_querydict(self.request.GET),
             }
         )
         context["subcorpus_form"] = SavedSubcorpusForm(
-            initial={"serialized_filters": serialize_querydict(self.request.GET)}
+            initial={
+                "subcorpus_id": saved_subcorpus.pk if saved_subcorpus else "",
+                "name": saved_subcorpus.name if saved_subcorpus else initial_name,
+                "description": saved_subcorpus.description if saved_subcorpus else "",
+                "is_public": saved_subcorpus.is_public if saved_subcorpus else False,
+                "serialized_filters": serialize_querydict(self.request.GET),
+            }
         )
+        context["saved_query"] = saved_query
+        context["saved_subcorpus"] = saved_subcorpus
+        if self.request.user.is_authenticated:
+            recent_searches = list(SearchHistory.objects.filter(user=self.request.user)[:6])
+            for item in recent_searches:
+                filters = dict(item.filters or {})
+                if item.query_text:
+                    filters["text_query"] = item.query_text
+                if item.query_text and item.search_type != SearchHistory.SEARCH_METADATA:
+                    filters["search_mode"] = item.search_type
+                querystring = payload_to_querystring(filters)
+                item.run_url = f"{self.request.path}?{querystring}" if querystring else self.request.path
+            context["recent_searches"] = recent_searches
         return context
 
 
@@ -323,7 +380,7 @@ class ExportSearchResultsView(View):
         if not form.is_valid():
             messages.error(request, "Невозможно экспортировать некорректный запрос.")
             return redirect("corpus:search")
-        results = search_articles(form, user=request.user if request.user.is_authenticated else None)
+        results = search_articles(form, user=request.user if request.user.is_authenticated else None, record_history=False)
         response = HttpResponse(export_search_results_csv(results), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = 'attachment; filename="search-results.csv"'
         return response
@@ -337,7 +394,19 @@ class SaveQueryView(LoginRequiredMixin, FormView):
         search_form = SearchForm(deserialize_payload(form.cleaned_data["serialized_query"]))
         result_count = 0
         if search_form.is_valid():
-            result_count = len(search_articles(search_form, user=self.request.user))
+            result_count = len(search_articles(search_form, user=self.request.user, record_history=False))
+        query_id = form.cleaned_data.get("query_id")
+        if query_id:
+            query = get_object_or_404(SavedQuery, pk=query_id, user=self.request.user)
+            update_saved_query(
+                query,
+                form.cleaned_data["name"],
+                form.cleaned_data["description"],
+                form.cleaned_data["serialized_query"],
+                result_count=result_count,
+            )
+            messages.success(self.request, "РЎРѕС…СЂР°РЅРµРЅРЅР°СЏ РІС‹Р±РѕСЂРєР° РѕР±РЅРѕРІР»РµРЅР°.")
+            return redirect("accounts:dashboard")
         save_query(
             self.request.user,
             form.cleaned_data["name"],
@@ -349,6 +418,65 @@ class SaveQueryView(LoginRequiredMixin, FormView):
         return redirect("accounts:dashboard")
 
 
+class SavedQueryListView(LoginRequiredMixin, ListView):
+    template_name = "corpus/saved_query_list.html"
+    context_object_name = "saved_queries"
+    paginate_by = 20
+
+    def get_queryset(self):
+        return SavedQuery.objects.filter(user=self.request.user)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        for query in context["saved_queries"]:
+            query.summary_items = describe_query_payload(query.query_payload)
+        return context
+
+
+class SavedQueryRunView(UserOwnedObjectMixin, View):
+    model = SavedQuery
+
+    def get(self, request, *args, **kwargs):
+        return redirect(self.get_object().get_search_url())
+
+
+class SavedQueryUpdateView(UserOwnedObjectMixin, FormView):
+    model = SavedQuery
+    template_name = "corpus/saved_query_edit.html"
+    form_class = SavedQueryEditForm
+
+    def get_initial(self):
+        query = self.get_object()
+        return {"name": query.name, "description": query.description}
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.get_object()
+        context["saved_query"] = query
+        context["query_summary"] = describe_query_payload(query.query_payload)
+        return context
+
+    def form_valid(self, form):
+        query = self.get_object()
+        query.name = form.cleaned_data["name"]
+        query.description = form.cleaned_data["description"]
+        query.save(update_fields=["name", "description", "updated_at"])
+        messages.success(self.request, "РџР°СЂР°РјРµС‚СЂС‹ СЃРѕС…СЂР°РЅРµРЅРЅРѕР№ РІС‹Р±РѕСЂРєРё РѕР±РЅРѕРІР»РµРЅС‹.")
+        return redirect("corpus:saved-query-list")
+
+
+class SavedQueryDeleteView(UserOwnedObjectMixin, View):
+    model = SavedQuery
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        query = self.get_object()
+        query_name = query.name
+        query.delete()
+        messages.success(request, f"Р’С‹Р±РѕСЂРєР° «{query_name}» СѓРґР°Р»РµРЅР°.")
+        return redirect("corpus:saved-query-list")
+
+
 class SavedSubcorpusListView(LoginRequiredMixin, ListView):
     template_name = "corpus/subcorpus_list.html"
     context_object_name = "subcorpora"
@@ -356,6 +484,12 @@ class SavedSubcorpusListView(LoginRequiredMixin, ListView):
 
     def get_queryset(self):
         return SavedSubcorpus.objects.filter(user=self.request.user).prefetch_related("articles")
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        for subcorpus in context["subcorpora"]:
+            subcorpus.summary_items = describe_query_payload(subcorpus.filter_payload)
+        return context
 
 
 class SavedSubcorpusCreateView(LoginRequiredMixin, FormView):
@@ -368,6 +502,18 @@ class SavedSubcorpusCreateView(LoginRequiredMixin, FormView):
         return initial
 
     def form_valid(self, form):
+        subcorpus_id = form.cleaned_data.get("subcorpus_id")
+        if subcorpus_id:
+            subcorpus = get_object_or_404(SavedSubcorpus, pk=subcorpus_id, user=self.request.user)
+            update_saved_subcorpus(
+                subcorpus,
+                name=form.cleaned_data["name"],
+                description=form.cleaned_data["description"],
+                payload=form.cleaned_data.get("serialized_filters", "{}"),
+                is_public=form.cleaned_data["is_public"],
+            )
+            messages.success(self.request, "Подкорпус обновлен и пересобран по новым условиям.")
+            return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
         subcorpus = build_subcorpus(
             self.request.user,
             form.cleaned_data["name"],
@@ -389,6 +535,92 @@ class SavedSubcorpusDetailView(LoginRequiredMixin, DetailView):
             "articles__section",
             "articles__article_authors__author",
         )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["filter_summary"] = describe_query_payload(self.object.filter_payload)
+        return context
+
+
+class SavedSubcorpusUpdateView(UserOwnedObjectMixin, FormView):
+    model = SavedSubcorpus
+    template_name = "corpus/subcorpus_edit.html"
+    form_class = SavedSubcorpusForm
+
+    def get_initial(self):
+        subcorpus = self.get_object()
+        return {
+            "subcorpus_id": subcorpus.pk,
+            "name": subcorpus.name,
+            "description": subcorpus.description,
+            "is_public": subcorpus.is_public,
+            "serialized_filters": serialize_querydict(subcorpus.filter_payload),
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        subcorpus = self.get_object()
+        context["subcorpus"] = subcorpus
+        context["filter_summary"] = describe_query_payload(subcorpus.filter_payload)
+        return context
+
+    def form_valid(self, form):
+        subcorpus = self.get_object()
+        update_saved_subcorpus(
+            subcorpus,
+            name=form.cleaned_data["name"],
+            description=form.cleaned_data["description"],
+            payload=form.cleaned_data.get("serialized_filters", "{}"),
+            is_public=form.cleaned_data["is_public"],
+        )
+        messages.success(self.request, "Параметры подкорпуса обновлены.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+        subcorpus = self.get_object()
+        subcorpus.name = form.cleaned_data["name"]
+        subcorpus.description = form.cleaned_data["description"]
+        subcorpus.is_public = form.cleaned_data["is_public"]
+        subcorpus.save(update_fields=["name", "description", "is_public", "updated_at"])
+        messages.success(self.request, "РџР°СЂР°РјРµС‚СЂС‹ РїРѕРґРєРѕСЂРїСѓСЃР° РѕР±РЅРѕРІР»РµРЅС‹.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+
+class SavedSubcorpusRefreshView(UserOwnedObjectMixin, View):
+    model = SavedSubcorpus
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        subcorpus.refresh_membership()
+        messages.success(request, "РЎРѕСЃС‚Р°РІ РїРѕРґРєРѕСЂРїСѓСЃР° РѕР±РЅРѕРІР»РµРЅ РїРѕ РёСЃС…РѕРґРЅС‹Рј С„РёР»СЊС‚СЂР°Рј.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+
+class SavedSubcorpusDeleteView(UserOwnedObjectMixin, View):
+    model = SavedSubcorpus
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        subcorpus_name = subcorpus.name
+        subcorpus.delete()
+        messages.success(request, f"РџРѕРґРєРѕСЂРїСѓСЃ «{subcorpus_name}» СѓРґР°Р»РµРЅ.")
+        return redirect("corpus:subcorpus-list")
+
+
+class ArticleFileAccessView(View):
+    def get(self, request, pk, *args, **kwargs):
+        article_file = get_object_or_404(ArticleFile.objects.select_related("article"), pk=pk, article__is_published=True)
+        if article_file.file and article_file.file.storage.exists(article_file.file.name):
+            return FileResponse(
+                article_file.file.open("rb"),
+                as_attachment=False,
+                filename=article_file.original_filename or Path(article_file.file.name).name,
+            )
+        if article_file.external_url:
+            return redirect(article_file.external_url)
+        if article_file.article.original_url:
+            return redirect(article_file.article.original_url)
+        raise Http404("Article file is unavailable.")
 
 
 class AddArticleToSubcorpusView(LoginRequiredMixin, FormView):

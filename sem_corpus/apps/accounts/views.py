@@ -7,6 +7,7 @@ from django.views.generic import FormView, TemplateView
 from sem_corpus.apps.accounts.forms import RegistrationForm
 from sem_corpus.apps.accounts.models import UserActivity
 from sem_corpus.apps.corpus.models import SavedQuery, SavedSubcorpus
+from sem_corpus.apps.corpus.services import describe_query_payload
 
 
 class RegistrationView(FormView):
@@ -34,5 +35,9 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         user = self.request.user
         context["saved_queries"] = SavedQuery.objects.filter(user=user)[:10]
         context["saved_subcorpora"] = SavedSubcorpus.objects.filter(user=user)[:10]
+        for query in context["saved_queries"]:
+            query.summary_items = describe_query_payload(query.query_payload)
+        for subcorpus in context["saved_subcorpora"]:
+            subcorpus.summary_items = describe_query_payload(subcorpus.filter_payload)
         context["recent_activity"] = UserActivity.objects.filter(user=user)[:12]
         return context

@@ -4,15 +4,20 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-lg-7">
+    <div class="col-lg-8">
         <div class="card surface-card">
             <div class="card-body p-4">
                 <h1 class="h3 mb-3">Сохранение подкорпуса</h1>
-                <p class="text-secondary">Подкорпус будет сформирован на основе выбранных фильтров и доступен в личном кабинете.</p>
+                <p class="text-secondary">
+                    Подкорпус будет сформирован на основе выбранных фильтров и станет доступен для повторного поиска и аналитики.
+                </p>
                 <form method="post" class="vstack gap-3">
                     {% csrf_token %}
                     {{ form.as_p }}
-                    <button class="btn btn-primary" type="submit">Сохранить</button>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Сохранить</button>
+                        <a class="btn btn-outline-secondary" href="{% url 'corpus:search' %}?{{ request.GET.urlencode }}">Вернуться к поиску</a>
+                    </div>
                 </form>
             </div>
         </div>

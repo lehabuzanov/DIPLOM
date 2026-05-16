@@ -34,12 +34,26 @@
     <div class="col-lg-4">
         <div class="card surface-card h-100">
             <div class="card-body">
-                <h2 class="h5 mb-3">Сохраненные запросы</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Сохраненные запросы</h2>
+                    <a class="small text-decoration-none" href="{% url 'corpus:saved-query-list' %}">Все</a>
+                </div>
                 <div class="vstack gap-3">
                     {% for query in saved_queries %}
-                        <div>
+                        <div class="border-bottom pb-3">
                             <div class="fw-semibold">{{ query.name }}</div>
-                            <div class="small text-secondary">{{ query.last_result_count }} результатов</div>
+                            <div class="small text-secondary mb-2">{{ query.last_result_count }} результатов</div>
+                            {% if query.summary_items %}
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    {% for item in query.summary_items|slice:":3" %}
+                                        <span class="badge text-bg-light border">{{ item }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'corpus:saved-query-run' query.pk %}">Открыть</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:saved-query-edit' query.pk %}">Параметры</a>
+                            </div>
                         </div>
                     {% empty %}
                         <p class="text-secondary mb-0">Пока нет сохраненных запросов.</p>
@@ -51,12 +65,26 @@
     <div class="col-lg-4">
         <div class="card surface-card h-100">
             <div class="card-body">
-                <h2 class="h5 mb-3">Подкорпуса</h2>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h5 mb-0">Подкорпуса</h2>
+                    <a class="small text-decoration-none" href="{% url 'corpus:subcorpus-list' %}">Все</a>
+                </div>
                 <div class="vstack gap-3">
                     {% for subcorpus in saved_subcorpora %}
-                        <div>
+                        <div class="border-bottom pb-3">
                             <div class="fw-semibold"><a class="text-decoration-none" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">{{ subcorpus.name }}</a></div>
-                            <div class="small text-secondary">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                            <div class="small text-secondary mb-2">{{ subcorpus.article_count }} статей • {{ subcorpus.token_count }} токенов</div>
+                            {% if subcorpus.summary_items %}
+                                <div class="d-flex flex-wrap gap-2 mb-2">
+                                    {% for item in subcorpus.summary_items|slice:":3" %}
+                                        <span class="badge text-bg-light border">{{ item }}</span>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">Открыть</a>
+                                <a class="btn btn-sm btn-outline-secondary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Аналитика</a>
+                            </div>
                         </div>
                     {% empty %}
                         <p class="text-secondary mb-0">Сформируйте первый подкорпус из результатов поиска.</p>

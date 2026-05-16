@@ -6,8 +6,9 @@
 <div class="page-head">
     <h1 class="h2 mb-2">Аналитика корпуса</h1>
     <p class="mb-0">
-        Частотные списки, динамика публикаций по годам, состав авторского корпуса, биграммы
-        и сравнение статей или подкорпусов доступны в едином аналитическом режиме.
+        Частотные списки, биграммы, динамика публикаций и сравнение материалов доступны в едином
+        аналитическом режиме. По умолчанию вывод очищен от технического и библиографического шума,
+        но при необходимости можно включить полный режим.
     </p>
 </div>
 
@@ -16,7 +17,18 @@
         <form method="get" class="row g-3 align-items-end">
             <div class="col-lg-4">{{ form.article.label_tag }}{{ form.article }}</div>
             <div class="col-lg-4">{{ form.subcorpus.label_tag }}{{ form.subcorpus }}</div>
-            <div class="col-lg-4">{{ form.mode.label_tag }}{{ form.mode }}</div>
+            <div class="col-lg-2">{{ form.mode.label_tag }}{{ form.mode }}</div>
+            <div class="col-lg-2">
+                <label class="form-label d-flex align-items-center gap-2">
+                    {{ form.filter_mode.label }}
+                    <span
+                        class="inline-help-badge"
+                        data-bs-toggle="tooltip"
+                        title="Очищенный: без английского шума, DOI/EDN, слишком коротких форм, цифр и библиографических хвостов. Полный: показывает весь поток токенов и сочетаний без фильтра."
+                    >?</span>
+                </label>
+                {{ form.filter_mode }}
+            </div>
             <div class="col-lg-6">
                 <label class="form-label mb-2">Сравнение статей</label>
                 <div class="row g-3">
@@ -31,8 +43,9 @@
                     <div class="col-md-6">{{ form.right_subcorpus }}</div>
                 </div>
             </div>
-            <div class="col-12">
+            <div class="col-12 d-flex flex-wrap gap-2">
                 <button class="btn btn-primary" type="submit">Обновить аналитику</button>
+                <a class="btn btn-outline-primary" href="{% url 'analytics:dashboard' %}">Сбросить</a>
             </div>
         </form>
     </div>
@@ -66,9 +79,17 @@
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h4 mb-0">Частотный список</h2>
-                    <span class="small text-secondary">{{ selected_scope_label }}</span>
+                <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <h2 class="h4 mb-0">Частотный список</h2>
+                        <span class="inline-help-badge" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <span class="small text-secondary">{{ selected_scope_label }}</span>
+                        {% if frequency_rows %}
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=frequency">Экспорт CSV</a>
+                        {% endif %}
+                    </div>
                 </div>
                 <div class="table-responsive">
                     <table class="table table-sm">
@@ -96,34 +117,38 @@
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h4 mb-0">Биграммы</h2>
-                    <span class="small text-secondary">{{ selected_scope_label }}</span>
-                </div>
-                {% if bigram_note %}
-                    <p class="text-secondary mb-0">{{ bigram_note }}</p>
-                {% else %}
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Сочетание</th>
-                                    <th class="text-end">Частота</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for row in bigram_rows %}
-                                    <tr>
-                                        <td>{{ row.label }}</td>
-                                        <td class="text-end">{{ row.count }}</td>
-                                    </tr>
-                                {% empty %}
-                                    <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
+                <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+                    <div class="d-flex align-items-center gap-2">
+                        <h2 class="h4 mb-0">Биграммы</h2>
+                        <span class="inline-help-badge" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
                     </div>
-                {% endif %}
+                    <div class="d-flex align-items-center gap-3 flex-wrap">
+                        <span class="small text-secondary">{{ selected_scope_label }}</span>
+                        {% if bigram_rows %}
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=bigrams">Экспорт CSV</a>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Сочетание</th>
+                                <th class="text-end">Частота</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in bigram_rows %}
+                                <tr>
+                                    <td>{{ row.label }}</td>
+                                    <td class="text-end">{{ row.count }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>
@@ -131,9 +156,14 @@
 
 <div class="card surface-card mt-4">
     <div class="card-body p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
             <h2 class="h4 mb-0">Сравнение материалов A/B</h2>
-            {% if comparison_scope_label %}<span class="small text-secondary">{{ comparison_scope_label }}</span>{% endif %}
+            <div class="d-flex align-items-center gap-3 flex-wrap">
+                {% if comparison_scope_label %}<span class="small text-secondary">{{ comparison_scope_label }}</span>{% endif %}
+                {% if comparison_rows %}
+                    <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=comparison">Экспорт CSV</a>
+                {% endif %}
+            </div>
         </div>
         {% if comparison_note %}
             <p class="text-secondary mb-0">{{ comparison_note }}</p>
@@ -142,7 +172,7 @@
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Лемма</th>
+                            <th>Единица</th>
                             <th class="text-end">Материал A</th>
                             <th class="text-end">Материал B</th>
                             <th class="text-end">Разница</th>

@@ -3,12 +3,18 @@
 {% block title %}{{ subcorpus.name }} | {{ site_short_title }}{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
     <div>
         <h1 class="h2 mb-1">{{ subcorpus.name }}</h1>
         <p class="text-secondary mb-0">{{ subcorpus.description|default:"Подкорпус сформирован из статей корпуса." }}</p>
     </div>
-    <a class="btn btn-outline-secondary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Анализировать</a>
+    <div class="d-flex flex-wrap gap-2">
+        <a class="btn btn-outline-primary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Аналитика</a>
+        {% if subcorpus.has_filter_payload %}
+            <a class="btn btn-outline-secondary" href="{{ subcorpus.get_source_search_url }}">Изменить условия</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary" href="{% url 'corpus:subcorpus-edit' subcorpus.pk %}">Параметры</a>
+    </div>
 </div>
 
 <div class="row g-4 mb-4">
@@ -32,8 +38,35 @@
     </div>
 </div>
 
+<div class="card surface-card mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center gap-3 flex-wrap mb-3">
+            <h2 class="h4 mb-0">Источник формирования</h2>
+            <div class="d-flex gap-2 flex-wrap">
+                <form method="post" action="{% url 'corpus:subcorpus-refresh' subcorpus.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-primary" type="submit">Пересобрать состав</button>
+                </form>
+                <form method="post" action="{% url 'corpus:subcorpus-delete' subcorpus.pk %}">
+                    {% csrf_token %}
+                    <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+                </form>
+            </div>
+        </div>
+        {% if filter_summary %}
+            <div class="d-flex flex-wrap gap-2">
+                {% for item in filter_summary %}
+                    <span class="badge text-bg-light border">{{ item }}</span>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="text-secondary mb-0">Подкорпус собран вручную или без фиксированного набора фильтров.</p>
+        {% endif %}
+    </div>
+</div>
+
 <div class="card surface-card">
-    <div class="card-body">
+    <div class="card-body p-4">
         <h2 class="h4 mb-3">Состав подкорпуса</h2>
         <div class="vstack gap-3">
             {% for article in subcorpus.articles.all %}

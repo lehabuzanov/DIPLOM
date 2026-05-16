@@ -1,6 +1,6 @@
 from django import forms
 
-from sem_corpus.apps.corpus.models import Article, Author, SavedSubcorpus, Section
+from sem_corpus.apps.corpus.models import Article, Author, SavedQuery, SavedSubcorpus, Section
 
 
 class SearchForm(forms.Form):
@@ -39,17 +39,19 @@ class SearchForm(forms.Form):
 
 
 class SavedSubcorpusForm(forms.ModelForm):
+    subcorpus_id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
     serialized_filters = forms.CharField(widget=forms.HiddenInput(), required=False)
 
     class Meta:
         model = SavedSubcorpus
-        fields = ["name", "description", "is_public", "serialized_filters"]
+        fields = ["name", "description", "is_public", "subcorpus_id", "serialized_filters"]
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
         }
 
 
 class SaveQueryForm(forms.Form):
+    query_id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
     name = forms.CharField(label="Название запроса", max_length=255)
     description = forms.CharField(
         label="Описание",
@@ -57,6 +59,15 @@ class SaveQueryForm(forms.Form):
         widget=forms.Textarea(attrs={"rows": 3}),
     )
     serialized_query = forms.CharField(widget=forms.HiddenInput())
+
+
+class SavedQueryEditForm(forms.ModelForm):
+    class Meta:
+        model = SavedQuery
+        fields = ["name", "description"]
+        widgets = {
+            "description": forms.Textarea(attrs={"rows": 3}),
+        }
 
 
 class AddToSubcorpusForm(forms.Form):

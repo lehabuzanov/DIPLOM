@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Параметры подкорпуса | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card surface-card">
+            <div class="card-body p-4">
+                <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+                    <div>
+                        <h1 class="h3 mb-1">Параметры подкорпуса</h1>
+                        <p class="text-secondary mb-0">Название и описание можно изменить здесь, а сами условия отбора — через поиск.</p>
+                    </div>
+                    {% if subcorpus.has_filter_payload %}
+                        <a class="btn btn-sm btn-outline-primary" href="{{ subcorpus.get_source_search_url }}">Изменить условия в поиске</a>
+                    {% endif %}
+                </div>
+                {% if filter_summary %}
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        {% for item in filter_summary %}
+                            <span class="badge text-bg-light border">{{ item }}</span>
+                        {% endfor %}
+                    </div>
+                {% endif %}
+                <form method="post" class="vstack gap-3">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <div class="d-flex gap-2 flex-wrap">
+                        <button class="btn btn-primary" type="submit">Сохранить изменения</button>
+                        <a class="btn btn-outline-secondary" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">Назад к подкорпусу</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

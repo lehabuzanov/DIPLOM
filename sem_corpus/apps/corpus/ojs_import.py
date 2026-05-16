@@ -25,7 +25,7 @@ from sem_corpus.apps.corpus.models import (
     Journal,
     Section,
 )
-from sem_corpus.apps.corpus.services import sync_keywords_for_article
+from sem_corpus.apps.corpus.services import clean_article_body_text, sync_keywords_for_article
 
 
 USER_AGENT = (
@@ -279,6 +279,16 @@ def download_pdf_payload(session: requests.Session, pdf_url: str) -> tuple[bytes
     return payload, extract_text_from_pdf_bytes(payload)
 
 
+def extract_text_from_saved_file(article_file: ArticleFile | None) -> str:
+    if not article_file or not article_file.file:
+        return ""
+    try:
+        with article_file.file.open("rb") as fh:
+            return extract_text_from_pdf_bytes(fh.read())
+    except Exception:  # noqa: BLE001
+        return ""
+
+
 def resolve_journal() -> Journal:
     journal = Journal.objects.filter(is_active=True).order_by("id").first()
     if journal:
@@ -399,9 +409,11 @@ def upsert_ojs_article(
             display_name=normalize_whitespace(author_payload.get("name", "")) or author.full_name,
         )
 
-    references_text = "\n".join(article_payload.get("references", []))
+    existing_text = ArticleText.objects.filter(article=article).first()
+    references_text = "\n".join(article_payload.get("references", [])) or (existing_text.references_text if existing_text else "")
     body_text = ""
     pdf_saved = False
+    article_file = ArticleFile.objects.filter(article=article, file_kind=ArticleFile.KIND_PDF).first()
 
     pdf_url = article_payload.get("pdf_url", "")
     if download_pdf and pdf_url:
@@ -424,6 +436,16 @@ def upsert_ojs_article(
         article_file.external_url = pdf_url
         article_file.save()
         pdf_saved = True
+    elif article_file:
+        body_text = extract_text_from_saved_file(article_file)
+
+    cleaned_body_text = clean_article_body_text(
+        body_text or (existing_text.body_text if existing_text else ""),
+        title=article_payload["title"],
+        abstract_text=article_payload.get("abstract", ""),
+        keywords_text=", ".join(article_payload.get("keywords", [])),
+        language=article.language,
+    )
 
     ArticleText.objects.update_or_create(
         article=article,
@@ -431,7 +453,7 @@ def upsert_ojs_article(
             "title_text": article_payload["title"],
             "abstract_text": article_payload.get("abstract", ""),
             "keywords_text": ", ".join(article_payload.get("keywords", [])),
-            "body_text": body_text,
+            "body_text": cleaned_body_text,
             "references_text": references_text,
         },
     )

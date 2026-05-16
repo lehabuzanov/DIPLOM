@@ -39,10 +39,14 @@
         <div class="card surface-card">
             <div class="card-body p-4">
                 <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h2 class="h4 mb-0">Очищенный текст</h2>
+                    <h2 class="h4 mb-0">Основной текст</h2>
                     <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:search' %}?text_query={{ article.title|urlencode }}">Искать по статье</a>
                 </div>
-                <div class="article-text">{{ article.text.cleaned_text|linebreaks }}</div>
+                {% if article_text %}
+                    <div class="article-text">{{ article_text.body_text|linebreaks }}</div>
+                {% else %}
+                    <p class="text-secondary mb-0">Текст статьи пока не извлечен. Метаданные и файл публикации доступны в правой колонке.</p>
+                {% endif %}
             </div>
         </div>
     </div>
@@ -51,18 +55,14 @@
             <div class="card-body">
                 <h2 class="h5 mb-3">Источники и файлы</h2>
                 {% if article.original_url %}
-                    <p><a href="{{ article.original_url }}" class="text-decoration-none">Оригинальная публикация</a></p>
+                    <p><a href="{{ article.original_url }}" class="text-decoration-none" target="_blank" rel="noopener">Страница статьи на сайте журнала</a></p>
                 {% endif %}
                 <div class="vstack gap-2">
                     {% for file in article.files.all %}
                         <div class="small">
-                            {% if file.file %}
-                                <a href="{{ file.file.url }}" class="text-decoration-none">{{ file.original_filename|default:file.file.name }}</a>
-                            {% elif file.external_url %}
-                                <a href="{{ file.external_url }}" class="text-decoration-none">{{ file.original_filename|default:"Внешний файл" }}</a>
-                            {% else %}
+                            <a href="{% url 'corpus:article-file' file.pk %}" class="text-decoration-none" target="_blank" rel="noopener">
                                 {{ file.original_filename|default:"Файл статьи" }}
-                            {% endif %}
+                            </a>
                         </div>
                     {% empty %}
                         <p class="text-secondary mb-0">Файлы не загружены.</p>

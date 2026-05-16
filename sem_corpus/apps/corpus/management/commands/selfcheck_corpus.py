@@ -9,7 +9,7 @@ from django.test import Client
 from django.urls import reverse
 
 from sem_corpus.apps.corpus.forms import SearchForm
-from sem_corpus.apps.corpus.models import Article, ArticleToken, Issue, SavedSubcorpus
+from sem_corpus.apps.corpus.models import Article, ArticleFile, ArticleToken, Issue, SavedQuery, SavedSubcorpus
 from sem_corpus.apps.corpus.services import search_articles
 
 
@@ -33,6 +33,7 @@ class Command(BaseCommand):
         client = Client(SERVER_NAME="localhost")
         article = Article.objects.published().select_related("text", "issue").first()
         editor = User.objects.filter(username="editor").first()
+        researcher = User.objects.filter(username="researcher").first()
 
         check(
             "Data presence",
@@ -45,6 +46,13 @@ class Command(BaseCommand):
             bool(article and hasattr(article, "text")),
             f"Sample article: {article.title}" if article else "Texts are attached to sample articles.",
             "No article with attached text was found.",
+        )
+        missing_text_count = Article.objects.published().exclude(text__body_text__gt="").distinct().count()
+        check(
+            "Text completeness",
+            missing_text_count == 0,
+            "All published articles have extracted body text.",
+            f"{missing_text_count} published article(s) still have no extracted body text.",
         )
 
         docs_dir = Path(settings.BASE_DIR) / "docs"
@@ -75,6 +83,15 @@ class Command(BaseCommand):
                 f"HTTP {response.status_code}",
                 f"HTTP {response.status_code}",
             )
+            article_file = ArticleFile.objects.filter(article=article).first()
+            if article_file:
+                file_response = client.get(reverse("corpus:article-file", kwargs={"pk": article_file.pk}))
+                check(
+                    "Article file access",
+                    file_response.status_code in {200, 302},
+                    f"HTTP {file_response.status_code}",
+                    f"HTTP {file_response.status_code}",
+                )
 
             title_probe = article.title.split()[0]
             title_form = SearchForm({"text_query": title_probe, "search_mode": SearchForm.SEARCH_FULLTEXT})
@@ -105,6 +122,42 @@ class Command(BaseCommand):
             )
         else:
             notes.append("No saved subcorpora were found yet. Create one from search results to test reuse scenarios.")
+        saved_query_count = SavedQuery.objects.count()
+        saved_query = None
+        saved_subcorpus = None
+        if saved_query_count:
+            self.stdout.write(self.style.SUCCESS(f"[OK] Saved queries: {saved_query_count} query record(s) available."))
+        else:
+            notes.append("No saved queries were found yet. Save a query from the search page to test reuse scenarios.")
+
+        if researcher:
+            saved_query = SavedQuery.objects.filter(user=researcher).first()
+            saved_subcorpus = SavedSubcorpus.objects.filter(user=researcher).first()
+            client.force_login(researcher)
+            for name, url_name in [
+                ("Dashboard page", "accounts:dashboard"),
+                ("Saved query list", "corpus:saved-query-list"),
+                ("Saved subcorpus list", "corpus:subcorpus-list"),
+            ]:
+                response = client.get(reverse(url_name))
+                check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
+            if saved_query:
+                response = client.get(reverse("corpus:saved-query-edit", kwargs={"pk": saved_query.pk}))
+                check("Saved query edit page", response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
+            else:
+                notes.append("No researcher-owned saved query found for edit-page verification.")
+            if saved_subcorpus:
+                for name, url_name in [
+                    ("Saved subcorpus detail page", "corpus:subcorpus-detail"),
+                    ("Saved subcorpus edit page", "corpus:subcorpus-edit"),
+                ]:
+                    response = client.get(reverse(url_name, kwargs={"pk": saved_subcorpus.pk}))
+                    check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
+            else:
+                notes.append("No researcher-owned subcorpus found for detail/edit-page verification.")
+            client.logout()
+        else:
+            notes.append("Researcher-only pages were not checked because the researcher user is missing.")
 
         if editor:
             client.force_login(editor)

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Сохраненные запросы | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Сохраненные запросы</h1>
+        <p class="text-secondary mb-0">Повторный запуск, редактирование названия и удаление исследовательских запросов.</p>
+    </div>
+    <a class="btn btn-primary" href="{% url 'corpus:search' %}">Новый поиск</a>
+</div>
+
+<div class="row g-4">
+    {% for query in saved_queries %}
+        <div class="col-xl-6">
+            <div class="card surface-card h-100">
+                <div class="card-body p-4">
+                    <h2 class="h5 mb-1">{{ query.name }}</h2>
+                    <p class="text-secondary">{{ query.description|default:"Описание не указано." }}</p>
+                    <div class="small text-secondary mb-3">{{ query.last_result_count }} результатов • обновлен {{ query.updated_at|date:"d.m.Y H:i" }}</div>
+                    {% if query.summary_items %}
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            {% for item in query.summary_items %}
+                                <span class="badge text-bg-light border">{{ item }}</span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-sm btn-primary" href="{% url 'corpus:saved-query-run' query.pk %}">Открыть</a>
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:saved-query-edit' query.pk %}">Параметры</a>
+                        <form method="post" action="{% url 'corpus:saved-query-delete' query.pk %}">
+                            {% csrf_token %}
+                            <button class="btn btn-sm btn-outline-danger" type="submit">Удалить</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    {% empty %}
+        <div class="col-12">
+            <div class="card surface-card">
+                <div class="card-body text-secondary p-4">
+                    Сохраненных запросов пока нет. Выполните поиск и сохраните интересующую выборку.
+                </div>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+{% include "includes/pagination.html" %}
+{% endblock %}

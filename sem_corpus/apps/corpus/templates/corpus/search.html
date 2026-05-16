@@ -17,7 +17,7 @@
             <div>
                 <h2 class="h4 mb-1">Параметры поиска</h2>
                 <p class="text-secondary mb-0">
-                    Кнопка запуска поиска продублирована сверху и снизу формы, чтобы не прокручивать страницу до конца.
+                    Кнопка запуска продублирована сверху и снизу формы, чтобы не прокручивать страницу до конца.
                 </p>
             </div>
             <div class="search-actions">
@@ -48,7 +48,7 @@
     </div>
 </div>
 
-<div class="d-flex justify-content-between align-items-start mb-3">
+<div class="d-flex justify-content-between align-items-start mb-3 gap-3 flex-wrap">
     <div>
         <h2 class="h3 mb-1">Результаты поиска</h2>
         <p class="text-secondary mb-0">Найдено: {{ result_count }}</p>
@@ -63,11 +63,23 @@
         <div class="col-lg-6">
             <div class="card surface-card h-100">
                 <div class="card-body">
-                    <h3 class="h5 mb-3">Сохранить запрос</h3>
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+                        <div>
+                            <h3 class="h5 mb-1">Сохраненные запросы</h3>
+                            {% if saved_query %}
+                                <p class="text-secondary small mb-0">Сейчас открыт сохраненный запрос. Сохранение обновит его параметры.</p>
+                            {% else %}
+                                <p class="text-secondary small mb-0">Сохраните текущую поисковую выборку, чтобы быстро вернуться к ней позже.</p>
+                            {% endif %}
+                        </div>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'corpus:saved-query-list' %}">Мои запросы</a>
+                    </div>
                     <form method="post" action="{% url 'corpus:save-query' %}" class="vstack gap-2">
                         {% csrf_token %}
                         {{ save_query_form.as_p }}
-                        <button class="btn btn-sm btn-primary" type="submit">Сохранить</button>
+                        <button class="btn btn-sm btn-primary" type="submit">
+                            {% if saved_query %}Обновить запрос{% else %}Сохранить запрос{% endif %}
+                        </button>
                     </form>
                 </div>
             </div>
@@ -75,13 +87,56 @@
         <div class="col-lg-6">
             <div class="card surface-card h-100">
                 <div class="card-body">
-                    <h3 class="h5 mb-3">Сформировать подкорпус</h3>
+                    <div class="d-flex justify-content-between align-items-start gap-3 mb-3 flex-wrap">
+                        <div>
+                            <h3 class="h5 mb-1">Сохраненные подкорпуса</h3>
+                            {% if saved_subcorpus %}
+                                <p class="text-secondary small mb-0">Открыт исходный набор фильтров существующего подкорпуса. Сохранение обновит его состав.</p>
+                            {% else %}
+                                <p class="text-secondary small mb-0">Сохраните текущую выборку как подкорпус для аналитики и повторного поиска.</p>
+                            {% endif %}
+                        </div>
+                        <a class="btn btn-sm btn-outline-primary" href="{% url 'corpus:subcorpus-list' %}">Мои подкорпуса</a>
+                    </div>
                     <form method="post" action="{% url 'corpus:subcorpus-create' %}" class="vstack gap-2">
                         {% csrf_token %}
                         {{ subcorpus_form.as_p }}
-                        <button class="btn btn-sm btn-primary" type="submit">Сохранить подкорпус</button>
+                        <button class="btn btn-sm btn-primary" type="submit">
+                            {% if saved_subcorpus %}Обновить подкорпус{% else %}Сохранить подкорпус{% endif %}
+                        </button>
                     </form>
                 </div>
+            </div>
+        </div>
+    </div>
+{% endif %}
+
+{% if request.user.is_authenticated and recent_searches %}
+    <div class="card surface-card mb-4">
+        <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
+                <div>
+                    <h3 class="h5 mb-1">Недавние запросы</h3>
+                    <p class="text-secondary small mb-0">История находится прямо на странице поиска, чтобы можно было быстро вернуть прошлую выборку.</p>
+                </div>
+                <a class="btn btn-sm btn-outline-secondary" href="{% url 'accounts:dashboard' %}">Личный кабинет</a>
+            </div>
+            <div class="vstack gap-3">
+                {% for item in recent_searches %}
+                    <div class="border-bottom pb-3">
+                        <div class="d-flex justify-content-between align-items-start gap-3 flex-wrap">
+                            <div>
+                                <div class="fw-semibold">
+                                    {% if item.query_text %}{{ item.query_text }}{% else %}Поиск по метаданным{% endif %}
+                                </div>
+                                <div class="small text-secondary">
+                                    {{ item.get_search_type_display }} • {{ item.created_at|date:"d.m.Y H:i" }} • {{ item.result_count }} результатов
+                                </div>
+                            </div>
+                            <a class="btn btn-sm btn-outline-primary" href="{{ item.run_url }}">Открыть</a>
+                        </div>
+                    </div>
+                {% endfor %}
             </div>
         </div>
     </div>
