@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Том {{ issue.volume }}, № {{ issue.number }} | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head">
+    <div class="small text-secondary mb-2">{{ issue.year }} год</div>
+    <h1 class="h2 mb-2">Том {{ issue.volume }}, № {{ issue.number }}</h1>
+    <p class="mb-0">{{ issue.title|default:"Структура выпуска и статьи по разделам." }}</p>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-4">
+        <div class="stat-card">
+            <div class="stat-label">Статьи</div>
+            <div class="stat-value">{{ article_total }}</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="stat-card">
+            <div class="stat-label">Год</div>
+            <div class="stat-value">{{ issue.year }}</div>
+        </div>
+    </div>
+    <div class="col-sm-4">
+        <div class="stat-card">
+            <div class="stat-label">Авторы</div>
+            <div class="stat-value">{{ author_total }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="d-flex flex-wrap gap-2 mb-4">
+    <a class="btn btn-outline-primary" href="{% url 'corpus:issue-list' %}">К списку выпусков</a>
+    {% if issue.source_url %}
+        <a class="btn btn-outline-secondary" href="{{ issue.source_url }}" target="_blank" rel="noopener">Открыть на сайте журнала</a>
+    {% endif %}
+</div>
+
+<section class="card surface-card">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center gap-3 mb-3 flex-wrap">
+            <h2 class="h4 mb-0">Статьи выпуска</h2>
+            <span class="small text-secondary">{{ article_total }} статей</span>
+        </div>
+        <div class="vstack gap-3">
+            {% for article in articles %}
+                <article class="border-bottom pb-3">
+                    <h3 class="h5 mb-1">
+                        <a class="text-decoration-none" href="{{ article.get_absolute_url }}">{{ article.title }}</a>
+                    </h3>
+                    <div class="small text-secondary">{{ article.author_line }}</div>
+                </article>
+            {% empty %}
+                <div class="text-secondary">В этом выпуске пока нет статей.</div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

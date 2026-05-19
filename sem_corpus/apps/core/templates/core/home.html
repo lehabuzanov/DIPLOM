@@ -101,18 +101,14 @@
     <div class="col-lg-4">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h3 mb-3">Структура корпуса</h2>
+                <h2 class="h3 mb-3">Как организован корпус</h2>
                 <p class="text-secondary">
-                    Метаданные и тексты организованы по выпускам, разделам журнала и авторам,
+                    Метаданные и тексты организованы по выпускам, авторам и публикациям,
                     что позволяет формировать устойчивые исследовательские выборки.
                 </p>
-                <div>
-                    {% for section in sections_overview %}
-                        <span class="section-chip">{{ section.name }}: {{ section.total }}</span>
-                    {% empty %}
-                        <span class="text-secondary">Разделы появятся после загрузки статей.</span>
-                    {% endfor %}
-                </div>
+                <p class="mb-0 text-secondary">
+                    Для отбора материалов используйте выпуск, год, автора, язык, ключевые слова и текстовый поиск.
+                </p>
             </div>
         </div>
     </div>

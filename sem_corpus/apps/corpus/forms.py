@@ -1,6 +1,6 @@
 from django import forms
 
-from sem_corpus.apps.corpus.models import Article, Author, SavedQuery, SavedSubcorpus, Section
+from sem_corpus.apps.corpus.models import Article, Author, SavedQuery, SavedSubcorpus
 
 
 class SearchForm(forms.Form):
@@ -17,13 +17,55 @@ class SearchForm(forms.Form):
 
     text_query = forms.CharField(label="Поисковый запрос", required=False)
     search_mode = forms.ChoiceField(label="Режим поиска", choices=SEARCH_MODES, required=False)
-    title = forms.CharField(label="Название статьи", required=False)
+    title = forms.CharField(
+        label="Название статьи",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "js-suggest-input",
+                "data-suggest-url": "/corpus/suggest/articles/",
+                "data-suggest-placeholder": "Найти статью",
+                "autocomplete": "off",
+            }
+        ),
+    )
     year_from = forms.IntegerField(label="Год от", required=False)
     year_to = forms.IntegerField(label="Год до", required=False)
-    volume = forms.CharField(label="Том", required=False)
-    issue_number = forms.CharField(label="Номер", required=False)
-    section = forms.ModelChoiceField(label="Раздел", queryset=Section.objects.none(), required=False)
-    author = forms.ModelChoiceField(label="Автор", queryset=Author.objects.none(), required=False)
+    volume = forms.CharField(
+        label="Том",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "js-suggest-input",
+                "data-suggest-url": "/corpus/suggest/volumes/",
+                "data-suggest-placeholder": "Выберите или введите том",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    issue_number = forms.CharField(
+        label="Номер",
+        required=False,
+        widget=forms.TextInput(
+            attrs={
+                "class": "js-suggest-input",
+                "data-suggest-url": "/corpus/suggest/issues/",
+                "data-suggest-placeholder": "Выберите или введите номер",
+                "autocomplete": "off",
+            }
+        ),
+    )
+    author = forms.ModelChoiceField(
+        label="Автор",
+        queryset=Author.objects.none(),
+        required=False,
+        widget=forms.Select(
+            attrs={
+                "class": "js-author-select",
+                "data-search-placeholder": "Найти автора",
+            }
+        ),
+    )
     language = forms.ChoiceField(
         label="Язык",
         choices=[("", "Все языки"), *Article.LANGUAGE_CHOICES],
@@ -33,7 +75,6 @@ class SearchForm(forms.Form):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields["section"].queryset = Section.objects.all()
         self.fields["author"].queryset = Author.objects.all()
         self.fields["search_mode"].initial = self.SEARCH_FULLTEXT
 

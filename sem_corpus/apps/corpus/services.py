@@ -281,12 +281,19 @@ def _looks_like_metadata_paragraph(paragraph: str) -> bool:
     return False
 
 
-def _is_predominantly_latin(paragraph: str) -> bool:
-    letters = [char for char in paragraph if char.isalpha()]
-    if len(letters) < 30:
-        return False
-    latin_letters = sum(1 for char in letters if "a" <= char.lower() <= "z")
-    return (latin_letters / len(letters)) >= 0.55
+def _is_trailing_marker_line(lowered_line: str) -> bool:
+    if lowered_line.startswith(
+        (
+            "keywords:",
+            "ключевые слова:",
+            "for citation",
+            "образец цитирования",
+        )
+    ):
+        return True
+    if lowered_line.startswith(("получена:", "получено:")):
+        return True
+    return lowered_line.strip(" .:") in {"references", "литература", "список литературы"}
 
 
 def _build_paragraphs(raw_text: str) -> list[str]:
@@ -374,7 +381,7 @@ def clean_article_body_text(
     anchor_index = -1
     intro_index = -1
     for index, line in enumerate(normalized_lines):
-        if line.lower() in {"введение", "introduction"}:
+        if re.match(r"^(введение|introduction)\b", line.lower()):
             intro_index = index
             break
     if abstract_fragment:
@@ -406,19 +413,7 @@ def clean_article_body_text(
             flush_paragraph()
             continue
 
-        marker_line = lowered.startswith(
-            (
-                "keywords:",
-                "ключевые слова:",
-                "for citation",
-                "образец цитирования",
-                "получена",
-                "получено",
-                "references",
-                "литература",
-                "список литературы",
-            )
-        )
+        marker_line = _is_trailing_marker_line(lowered)
         if marker_line:
             if content_started:
                 flush_paragraph()
@@ -454,9 +449,6 @@ def clean_article_body_text(
             else:
                 continue
 
-        if language != "en" and _is_predominantly_latin(line):
-            flush_paragraph()
-            break
         current_paragraph.append(line)
 
     flush_paragraph()
@@ -498,7 +490,7 @@ def clean_article_body_text(
     anchor_index = -1
     intro_index = -1
     for index, line in enumerate(normalized_lines):
-        if line.lower() in {"введение", "introduction"}:
+        if re.match(r"^(введение|introduction)\b", line.lower()):
             intro_index = index
             break
 
@@ -521,7 +513,6 @@ def clean_article_body_text(
     content_started = False
     kept_lines: list[str] = []
     current_paragraph: list[str] = []
-    collected_cyrillic = 0
 
     def flush_paragraph() -> None:
         nonlocal current_paragraph
@@ -536,19 +527,7 @@ def clean_article_body_text(
             flush_paragraph()
             continue
 
-        marker_line = lowered.startswith(
-            (
-                "keywords:",
-                "ключевые слова:",
-                "for citation",
-                "образец цитирования",
-                "получена",
-                "получено",
-                "references",
-                "литература",
-                "список литературы",
-            )
-        )
+        marker_line = _is_trailing_marker_line(lowered)
         if marker_line:
             if content_started:
                 flush_paragraph()
@@ -561,7 +540,7 @@ def clean_article_body_text(
             continue
 
         if not content_started:
-            if title_index >= 0 and index <= title_end_index:
+            if title_index >= 0 and title_index <= index <= title_end_index:
                 continue
             if intro_index >= 0 and index < intro_index:
                 continue
@@ -588,10 +567,6 @@ def clean_article_body_text(
             else:
                 continue
 
-        if language != "en" and _is_predominantly_latin(line) and collected_cyrillic >= 80:
-            flush_paragraph()
-            break
-        collected_cyrillic += sum(1 for char in line if "\u0400" <= char <= "\u052f")
         current_paragraph.append(line)
 
     flush_paragraph()
@@ -769,8 +744,6 @@ def apply_article_filters(queryset, filters):
         queryset = queryset.filter(issue__volume__iexact=volume)
     if issue_number := payload.get("issue_number"):
         queryset = queryset.filter(issue__number__iexact=issue_number)
-    if section := payload.get("section"):
-        queryset = queryset.filter(section_id=getattr(section, "id", section))
     if author := payload.get("author"):
         queryset = queryset.filter(authors__id=getattr(author, "id", author))
     if language := payload.get("language"):
@@ -819,10 +792,6 @@ def describe_query_payload(payload: str | dict | None) -> list[str]:
         summary.append(f"Том: {volume}")
     if issue_number := payload_data.get("issue_number"):
         summary.append(f"Номер: {issue_number}")
-    if section_id := payload_data.get("section"):
-        section = Section.objects.filter(pk=section_id).values_list("name", flat=True).first()
-        if section:
-            summary.append(f"Раздел: {section}")
     if author_id := payload_data.get("author"):
         author = Author.objects.filter(pk=author_id).first()
         if author:
@@ -1139,12 +1108,12 @@ def compare_frequency_sets(
     left_articles,
     right_articles,
     mode: str = "lemma",
-    limit: int = 15,
+    limit: int | None = 15,
     filter_mode: str = ANALYTICS_FILTER_CURATED,
 ):
     left_freq = get_frequency_counts(left_articles, mode=mode, filter_mode=filter_mode)
     right_freq = get_frequency_counts(right_articles, mode=mode, filter_mode=filter_mode)
-    all_keys = set(left_freq) | set(right_freq)
+    all_keys = set(left_freq) & set(right_freq)
     rows = []
     for key in all_keys:
         left_count = left_freq.get(key, 0)
@@ -1154,11 +1123,12 @@ def compare_frequency_sets(
                 "label": key,
                 "left_count": left_count,
                 "right_count": right_count,
-                "delta": left_count - right_count,
+                "shared_count": min(left_count, right_count),
+                "total_count": left_count + right_count,
             }
         )
-    rows.sort(key=lambda item: abs(item["delta"]), reverse=True)
-    return rows[:limit]
+    rows.sort(key=lambda item: (-item["shared_count"], -item["total_count"], item["label"]))
+    return rows if limit is None else rows[:limit]
 
 
 def compare_subcorpora(
@@ -1189,9 +1159,17 @@ def export_rows_csv(rows, header_label: str, value_key: str = "count") -> str:
 def export_comparison_rows_csv(rows) -> str:
     buffer = io.StringIO()
     writer = csv.writer(buffer)
-    writer.writerow(["Единица", "Материал A", "Материал B", "Разница"])
+    writer.writerow(["Единица", "Материал A", "Материал B", "Совпадения", "Всего"])
     for row in rows:
-        writer.writerow([row["label"], row["left_count"], row["right_count"], row["delta"]])
+        writer.writerow(
+            [
+                row["label"],
+                row["left_count"],
+                row["right_count"],
+                row["shared_count"],
+                row["total_count"],
+            ]
+        )
     return buffer.getvalue()
 
 

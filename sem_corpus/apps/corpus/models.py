@@ -287,6 +287,42 @@ class ArticleText(TimestampedModel):
         return f"Текст статьи: {self.article.title}"
 
 
+class ArticleHighlight(TimestampedModel):
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="article_highlights",
+        verbose_name="пользователь",
+    )
+    article = models.ForeignKey(
+        Article,
+        on_delete=models.CASCADE,
+        related_name="highlights",
+        verbose_name="статья",
+    )
+    char_start = models.PositiveIntegerField("символ начала")
+    char_end = models.PositiveIntegerField("символ конца")
+    selected_text = models.TextField("выделенный фрагмент")
+    note_text = models.TextField("комментарий", blank=True)
+
+    class Meta:
+        verbose_name = "пометка в статье"
+        verbose_name_plural = "пометки в статьях"
+        ordering = ["article_id", "char_start", "id"]
+        indexes = [
+            models.Index(fields=["user", "article", "char_start"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "article", "char_start", "char_end"],
+                name="unique_article_highlight_range_per_user",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.user}: {self.article.title} [{self.char_start}:{self.char_end}]"
+
+
 class Lemma(TimestampedModel):
     text = models.CharField("лемма", max_length=120)
     normalized = models.CharField("нормализованное значение", max_length=120)

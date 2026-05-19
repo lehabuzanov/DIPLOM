@@ -43,7 +43,51 @@
                     <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:search' %}?text_query={{ article.title|urlencode }}">Искать по статье</a>
                 </div>
                 {% if article_text %}
-                    <div class="article-text">{{ article_text.body_text|linebreaks }}</div>
+                    {% if request.user.is_authenticated %}
+                        <div class="article-highlight-hint" id="article-highlight-hint">
+                            <span class="small text-secondary">Выделите фрагмент текста мышью, чтобы сохранить пометку.</span>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}">Мои пометки</a>
+                        </div>
+                        <div class="article-highlight-toolbar d-none" id="article-highlight-toolbar">
+                            <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
+                                <div class="small">
+                                    <span class="fw-semibold">Пометки:</span>
+                                    <span id="article-highlight-counter"></span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-prev" aria-label="Предыдущая пометка">&larr;</button>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-next" aria-label="Следующая пометка">&rarr;</button>
+                                    <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-delete">Удалить</button>
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}">Все пометки</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="article-selection-panel d-none" id="article-selection-panel">
+                            <div class="small text-secondary mb-2" id="article-selection-preview"></div>
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <button class="btn btn-sm btn-primary" type="button" id="article-highlight-save">Сохранить пометку</button>
+                                <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-cancel">Отменить</button>
+                                <span class="small text-secondary" id="article-highlight-feedback"></span>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="article-highlight-hint">
+                            <span class="small text-secondary">Войдите, чтобы сохранять пометки к фрагментам статьи.</span>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>
+                        </div>
+                    {% endif %}
+                    <div
+                        class="article-reader"
+                        id="article-reader"
+                        data-url="{% url 'corpus:article-text-data' article.slug %}"
+                        data-highlights-url="{% url 'corpus:article-highlights' article.slug %}"
+                        data-can-highlight="{% if request.user.is_authenticated %}true{% else %}false{% endif %}"
+                    >
+                        <div class="article-text" id="article-text-body">
+                            <p class="text-secondary mb-0">Загрузка текста статьи...</p>
+                        </div>
+                    </div>
+                    <p class="article-reader-status small text-secondary mb-0" id="article-reader-status">Подготавливаем текст...</p>
                 {% else %}
                     <p class="text-secondary mb-0">Текст статьи пока не извлечен. Метаданные и файл публикации доступны в правой колонке.</p>
                 {% endif %}
@@ -101,4 +145,345 @@
         </div>
     </div>
 </article>
+{% endblock %}
+
+{% block extra_js %}
+{% if article_text %}
+<script>
+    (function () {
+        const reader = document.getElementById("article-reader");
+        const body = document.getElementById("article-text-body");
+        const status = document.getElementById("article-reader-status");
+        const hint = document.getElementById("article-highlight-hint");
+        const toolbar = document.getElementById("article-highlight-toolbar");
+        const counter = document.getElementById("article-highlight-counter");
+        const previousButton = document.getElementById("article-highlight-prev");
+        const nextButton = document.getElementById("article-highlight-next");
+        const deleteButton = document.getElementById("article-highlight-delete");
+        const selectionPanel = document.getElementById("article-selection-panel");
+        const selectionPreview = document.getElementById("article-selection-preview");
+        const saveButton = document.getElementById("article-highlight-save");
+        const cancelButton = document.getElementById("article-highlight-cancel");
+        const feedback = document.getElementById("article-highlight-feedback");
+        if (!reader || !body || !status) {
+            return;
+        }
+
+        const batchSize = 8;
+        let offset = 0;
+        let total = 0;
+        let hasMore = false;
+        let loading = false;
+        let loadedChunks = [];
+        let highlights = [];
+        let activeHighlightIndex = -1;
+        let pendingSelection = null;
+        const canHighlight = reader.dataset.canHighlight === "true";
+
+        function renderStatus() {
+            if (!total) {
+                status.textContent = "Текст статьи пока пуст.";
+                return;
+            }
+            status.textContent = hasMore
+                ? "Загружено " + offset + " из " + total + " фрагментов"
+                : "Показан полный текст";
+        }
+
+        function appendHighlightedText(node, chunk) {
+            const overlaps = highlights.filter(function (highlight) {
+                return highlight.start < chunk.end && highlight.end > chunk.start;
+            }).sort(function (left, right) {
+                return left.start - right.start;
+            });
+            let cursor = chunk.start;
+            overlaps.forEach(function (highlight) {
+                const highlightStart = Math.max(highlight.start, chunk.start);
+                const highlightEnd = Math.min(highlight.end, chunk.end);
+                if (highlightStart > cursor) {
+                    node.appendChild(document.createTextNode(chunk.text.slice(cursor - chunk.start, highlightStart - chunk.start)));
+                }
+                const mark = document.createElement("mark");
+                mark.className = "user-highlight";
+                mark.dataset.highlightId = highlight.id;
+                mark.textContent = chunk.text.slice(highlightStart - chunk.start, highlightEnd - chunk.start);
+                node.appendChild(mark);
+                cursor = highlightEnd;
+            });
+            if (cursor < chunk.end) {
+                node.appendChild(document.createTextNode(chunk.text.slice(cursor - chunk.start)));
+            }
+        }
+
+        function renderChunks() {
+            if (!loadedChunks.length && offset === 0) {
+                body.innerHTML = '<p class="text-secondary mb-0">Текст статьи пока пуст.</p>';
+                return;
+            }
+            body.innerHTML = "";
+            loadedChunks.forEach(function (chunk) {
+                const node = document.createElement("p");
+                node.dataset.start = chunk.start;
+                node.dataset.end = chunk.end;
+                appendHighlightedText(node, chunk);
+                body.appendChild(node);
+            });
+        }
+
+        async function loadMore(reset) {
+            if (loading || (!reset && !hasMore && offset > 0)) {
+                return;
+            }
+            loading = true;
+            if (reset) {
+                offset = 0;
+                total = 0;
+                hasMore = false;
+                loadedChunks = [];
+                body.innerHTML = '<p class="text-secondary mb-0">Загрузка текста статьи...</p>';
+            }
+
+            try {
+                const params = new URLSearchParams({
+                    offset: reset ? "0" : String(offset),
+                    limit: String(batchSize),
+                });
+                const response = await fetch(reader.dataset.url + "?" + params.toString(), {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                });
+                const payload = await response.json();
+                if (reset) {
+                    body.innerHTML = "";
+                }
+                total = payload.total || 0;
+                hasMore = Boolean(payload.has_more);
+                loadedChunks = loadedChunks.concat(payload.chunks || []);
+                offset += (payload.chunks || []).length;
+                renderChunks();
+                renderStatus();
+            } catch (error) {
+                body.innerHTML = '<p class="text-secondary mb-0">Не удалось загрузить текст статьи.</p>';
+                status.textContent = "Ошибка загрузки";
+            } finally {
+                loading = false;
+            }
+        }
+
+        reader.addEventListener("scroll", function () {
+            if (reader.scrollTop + reader.clientHeight >= reader.scrollHeight - 64) {
+                loadMore(false);
+            }
+        });
+
+        function getCookie(name) {
+            const cookie = document.cookie.split("; ").find(function (item) {
+                return item.startsWith(name + "=");
+            });
+            return cookie ? decodeURIComponent(cookie.split("=").slice(1).join("=")) : "";
+        }
+
+        function getChunkElement(node) {
+            return node && node.nodeType === Node.ELEMENT_NODE
+                ? node.closest("p[data-start]")
+                : node && node.parentElement
+                    ? node.parentElement.closest("p[data-start]")
+                    : null;
+        }
+
+        function getOffsetWithinChunk(chunkElement, node, localOffset) {
+            const range = document.createRange();
+            range.selectNodeContents(chunkElement);
+            range.setEnd(node, localOffset);
+            return range.toString().length;
+        }
+
+        function clearPendingSelection() {
+            pendingSelection = null;
+            if (selectionPanel) {
+                selectionPanel.classList.add("d-none");
+            }
+            if (feedback) {
+                feedback.textContent = "";
+            }
+            window.getSelection().removeAllRanges();
+        }
+
+        function captureSelection() {
+            if (!canHighlight || !selectionPanel) {
+                return;
+            }
+            const selection = window.getSelection();
+            if (!selection || selection.isCollapsed || !selection.rangeCount) {
+                return;
+            }
+            const range = selection.getRangeAt(0);
+            const startChunk = getChunkElement(range.startContainer);
+            const endChunk = getChunkElement(range.endContainer);
+            if (!startChunk || !endChunk || !body.contains(startChunk) || !body.contains(endChunk)) {
+                return;
+            }
+            const start = Number(startChunk.dataset.start) + getOffsetWithinChunk(startChunk, range.startContainer, range.startOffset);
+            const end = Number(endChunk.dataset.start) + getOffsetWithinChunk(endChunk, range.endContainer, range.endOffset);
+            if (end <= start) {
+                return;
+            }
+            pendingSelection = { start: start, end: end };
+            const previewText = selection.toString().trim().replace(/\s+/g, " ");
+            selectionPreview.textContent = previewText.length > 180
+                ? previewText.slice(0, 177) + "..."
+                : previewText;
+            feedback.textContent = "";
+            selectionPanel.classList.remove("d-none");
+        }
+
+        async function loadHighlights() {
+            const response = await fetch(reader.dataset.highlightsUrl, {
+                headers: { "X-Requested-With": "XMLHttpRequest" },
+            });
+            const payload = await response.json();
+            highlights = payload.items || [];
+            updateHighlightToolbar();
+            renderChunks();
+        }
+
+        function updateHighlightToolbar() {
+            if (!toolbar || !counter) {
+                return;
+            }
+            toolbar.classList.toggle("d-none", !highlights.length);
+            if (hint) {
+                hint.classList.toggle("d-none", Boolean(highlights.length));
+            }
+            if (!highlights.length) {
+                counter.textContent = "";
+                return;
+            }
+            if (activeHighlightIndex < 0) {
+                activeHighlightIndex = 0;
+            }
+            counter.textContent = (activeHighlightIndex + 1) + " из " + highlights.length;
+        }
+
+        async function loadUntilOffset(targetEnd) {
+            while (hasMore && (!loadedChunks.length || loadedChunks[loadedChunks.length - 1].end < targetEnd)) {
+                await loadMore(false);
+            }
+        }
+
+        async function goToHighlight(index) {
+            if (!highlights.length) {
+                return;
+            }
+            activeHighlightIndex = (index + highlights.length) % highlights.length;
+            const target = highlights[activeHighlightIndex];
+            await loadUntilOffset(target.end);
+            renderChunks();
+            updateHighlightToolbar();
+            body.querySelectorAll(".user-highlight-active").forEach(function (node) {
+                node.classList.remove("user-highlight-active");
+            });
+            const targetNode = body.querySelector('[data-highlight-id="' + target.id + '"]');
+            if (targetNode) {
+                targetNode.classList.add("user-highlight-active");
+                targetNode.scrollIntoView({ block: "center", behavior: "smooth" });
+            }
+        }
+
+        if (canHighlight) {
+            reader.addEventListener("mouseup", captureSelection);
+            reader.addEventListener("keyup", function (event) {
+                if (event.key === "Shift" || event.key.startsWith("Arrow")) {
+                    captureSelection();
+                }
+            });
+            saveButton.addEventListener("click", async function () {
+                if (!pendingSelection) {
+                    return;
+                }
+                saveButton.disabled = true;
+                feedback.textContent = "Сохраняем...";
+                try {
+                    const response = await fetch(reader.dataset.highlightsUrl, {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                            "X-CSRFToken": getCookie("csrftoken"),
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                        body: JSON.stringify(pendingSelection),
+                    });
+                    const payload = await response.json();
+                    if (!response.ok) {
+                        feedback.textContent = payload.error || "Не удалось сохранить пометку.";
+                        return;
+                    }
+                    highlights.push(payload);
+                    highlights.sort(function (left, right) {
+                        return left.start - right.start;
+                    });
+                    activeHighlightIndex = highlights.findIndex(function (item) {
+                        return item.id === payload.id;
+                    });
+                    clearPendingSelection();
+                    await goToHighlight(activeHighlightIndex);
+                } catch (error) {
+                    feedback.textContent = "Не удалось сохранить пометку.";
+                } finally {
+                    saveButton.disabled = false;
+                }
+            });
+            cancelButton.addEventListener("click", clearPendingSelection);
+            previousButton.addEventListener("click", function () {
+                goToHighlight(activeHighlightIndex - 1);
+            });
+            nextButton.addEventListener("click", function () {
+                goToHighlight(activeHighlightIndex + 1);
+            });
+            deleteButton.addEventListener("click", async function () {
+                if (!highlights.length || activeHighlightIndex < 0) {
+                    return;
+                }
+                const target = highlights[activeHighlightIndex];
+                deleteButton.disabled = true;
+                try {
+                    const response = await fetch("/corpus/highlights/" + target.id + "/delete/", {
+                        method: "POST",
+                        headers: {
+                            "X-CSRFToken": getCookie("csrftoken"),
+                            "X-Requested-With": "XMLHttpRequest",
+                        },
+                    });
+                    if (!response.ok) {
+                        return;
+                    }
+                    highlights = highlights.filter(function (item) {
+                        return item.id !== target.id;
+                    });
+                    if (!highlights.length) {
+                        activeHighlightIndex = -1;
+                        renderChunks();
+                        updateHighlightToolbar();
+                        return;
+                    }
+                    await goToHighlight(Math.min(activeHighlightIndex, highlights.length - 1));
+                } finally {
+                    deleteButton.disabled = false;
+                }
+            });
+        }
+
+        Promise.all([loadMore(true), loadHighlights()]).then(function () {
+            const targetId = Number(new URLSearchParams(window.location.search).get("highlight"));
+            if (targetId) {
+                const targetIndex = highlights.findIndex(function (item) {
+                    return item.id === targetId;
+                });
+                if (targetIndex >= 0) {
+                    goToHighlight(targetIndex);
+                }
+            }
+        });
+    }());
+</script>
+{% endif %}
 {% endblock %}

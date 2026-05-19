@@ -1,6 +1,16 @@
 from __future__ import annotations
 
 
+def repair_legacy_mojibake(value: str | None) -> str:
+    if not value:
+        return ""
+    try:
+        repaired = value.encode("cp1251").decode("utf-8")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+    return repaired if repaired != value else value
+
+
 def get_primary_role(user):
     if not user or not user.is_authenticated:
         return None

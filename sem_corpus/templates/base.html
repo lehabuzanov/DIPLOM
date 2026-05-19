@@ -46,6 +46,7 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'analytics:dashboard' %}">Аналитика</a></li>
                             {% if request.user.is_authenticated %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'corpus:subcorpus-list' %}">Подкорпуса</a></li>
+                                <li class="nav-item"><a class="nav-link" href="{% url 'accounts:highlights' %}">Пометки</a></li>
                             {% endif %}
                             {% if can_edit_corpus %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'corpus:editor-upload' %}">Загрузка статьи</a></li>
@@ -99,6 +100,190 @@
         document.addEventListener("DOMContentLoaded", function () {
             document.querySelectorAll('[data-bs-toggle="tooltip"]').forEach(function (element) {
                 new bootstrap.Tooltip(element);
+            });
+
+            document.querySelectorAll(".js-author-select").forEach(function (select) {
+                const options = Array.from(select.options).map(function (option) {
+                    return {
+                        value: option.value,
+                        text: option.text,
+                    };
+                });
+                const wrapper = document.createElement("div");
+                wrapper.className = "author-combobox";
+
+                const input = document.createElement("input");
+                input.type = "search";
+                input.className = "form-control author-combobox-input";
+                input.placeholder = select.dataset.searchPlaceholder || "Найти автора";
+                input.autocomplete = "off";
+
+                const list = document.createElement("div");
+                list.className = "author-combobox-list d-none";
+
+                select.parentNode.insertBefore(wrapper, select);
+                wrapper.appendChild(input);
+                wrapper.appendChild(list);
+                select.classList.add("visually-hidden");
+                wrapper.appendChild(select);
+
+                function normalize(value) {
+                    return String(value || "").toLocaleLowerCase("ru-RU").trim();
+                }
+
+                function syncInputWithSelection() {
+                    const selected = options.find(function (option) {
+                        return option.value === select.value;
+                    });
+                    input.value = selected && selected.value ? selected.text : "";
+                }
+
+                function setValue(option) {
+                    select.value = option.value;
+                    select.dispatchEvent(new Event("change", { bubbles: true }));
+                    input.value = option.value ? option.text : "";
+                    closeList();
+                }
+
+                function closeList() {
+                    list.classList.add("d-none");
+                }
+
+                function renderOptions(query) {
+                    const normalizedQuery = normalize(query);
+                    const visibleOptions = options.filter(function (option) {
+                        return option.value && (!normalizedQuery || normalize(option.text).includes(normalizedQuery));
+                    });
+                    list.innerHTML = "";
+
+                    if (!visibleOptions.length) {
+                        const empty = document.createElement("div");
+                        empty.className = "author-combobox-empty";
+                        empty.textContent = "Ничего не найдено";
+                        list.appendChild(empty);
+                        return;
+                    }
+
+                    visibleOptions.forEach(function (option) {
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "author-combobox-option";
+                        if (option.value === select.value) {
+                            button.classList.add("is-selected");
+                        }
+                        button.textContent = option.text;
+                        button.addEventListener("mousedown", function (event) {
+                            event.preventDefault();
+                            setValue(option);
+                        });
+                        list.appendChild(button);
+                    });
+                }
+
+                input.addEventListener("focus", function () {
+                    renderOptions(input.value);
+                    list.classList.remove("d-none");
+                });
+                input.addEventListener("input", function () {
+                    if (select.value) {
+                        select.value = "";
+                    }
+                    renderOptions(input.value);
+                    list.classList.remove("d-none");
+                });
+                input.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape") {
+                        closeList();
+                    }
+                    if (event.key === "Backspace" && !input.value) {
+                        select.value = "";
+                    }
+                });
+                input.addEventListener("blur", function () {
+                    window.setTimeout(function () {
+                        closeList();
+                        if (select.value) {
+                            syncInputWithSelection();
+                        }
+                    }, 120);
+                });
+
+                syncInputWithSelection();
+            });
+
+            document.querySelectorAll(".js-suggest-input").forEach(function (input) {
+                const wrapper = document.createElement("div");
+                wrapper.className = "suggest-combobox";
+                const list = document.createElement("div");
+                list.className = "suggest-combobox-list d-none";
+                input.parentNode.insertBefore(wrapper, input);
+                wrapper.appendChild(input);
+                wrapper.appendChild(list);
+
+                let debounceTimer = null;
+                let currentItems = [];
+
+                function closeList() {
+                    list.classList.add("d-none");
+                }
+
+                function renderItems(items) {
+                    currentItems = items;
+                    list.innerHTML = "";
+                    if (!items.length) {
+                        const empty = document.createElement("div");
+                        empty.className = "suggest-combobox-empty";
+                        empty.textContent = "Ничего не найдено";
+                        list.appendChild(empty);
+                        return;
+                    }
+
+                    items.forEach(function (item) {
+                        const button = document.createElement("button");
+                        button.type = "button";
+                        button.className = "suggest-combobox-option";
+                        button.textContent = item;
+                        button.title = item;
+                        button.addEventListener("mousedown", function (event) {
+                            event.preventDefault();
+                            input.value = item;
+                            closeList();
+                        });
+                        list.appendChild(button);
+                    });
+                }
+
+                async function loadItems() {
+                    const url = new URL(input.dataset.suggestUrl, window.location.origin);
+                    url.searchParams.set("q", input.value.trim());
+                    try {
+                        const response = await fetch(url.toString(), {
+                            headers: { "X-Requested-With": "XMLHttpRequest" },
+                        });
+                        const payload = await response.json();
+                        renderItems(payload.items || []);
+                        list.classList.remove("d-none");
+                    } catch (error) {
+                        list.innerHTML = '<div class="suggest-combobox-empty">Не удалось загрузить варианты</div>';
+                        list.classList.remove("d-none");
+                    }
+                }
+
+                input.placeholder = input.dataset.suggestPlaceholder || input.placeholder;
+                input.autocomplete = "off";
+                input.addEventListener("focus", loadItems);
+                input.addEventListener("input", function () {
+                    window.clearTimeout(debounceTimer);
+                    debounceTimer = window.setTimeout(loadItems, 140);
+                });
+                input.addEventListener("keydown", function (event) {
+                    if (event.key === "Escape") {
+                        closeList();
+                    }
+                });
+                input.addEventListener("blur", function () {
+                    window.setTimeout(closeList, 120);
+                });
             });
         });
     </script>

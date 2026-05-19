@@ -20,10 +20,13 @@
                     <div class="small text-secondary mb-2">{{ issue.year }} год</div>
                     <h2 class="h5">Том {{ issue.volume }}, № {{ issue.number }}</h2>
                     <p class="mb-2">{{ issue.title|default:"Выпуск журнала" }}</p>
-                    <p class="small text-secondary mb-3">{{ issue.articles.count }} статей</p>
-                    {% if issue.source_url %}
-                        <a href="{{ issue.source_url }}" class="small text-decoration-none">Источник выпуска</a>
-                    {% endif %}
+                    <p class="small text-secondary mb-3">{{ issue.article_total }} статей</p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a href="{% url 'corpus:issue-detail' issue.pk %}" class="btn btn-sm btn-outline-primary">Открыть выпуск</a>
+                        {% if issue.source_url %}
+                            <a href="{{ issue.source_url }}" class="btn btn-sm btn-outline-secondary" target="_blank" rel="noopener">На сайте журнала</a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>

@@ -75,6 +75,24 @@ class Command(BaseCommand):
             response = client.get(reverse(url_name))
             check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
 
+        issue = Issue.objects.first()
+        if issue:
+            response = client.get(reverse("corpus:issue-detail", kwargs={"pk": issue.pk}))
+            check(
+                "Issue detail page",
+                response.status_code == 200,
+                f"HTTP {response.status_code}",
+                f"HTTP {response.status_code}",
+            )
+
+        for name, url in [
+            ("Article suggestions", reverse("corpus:suggest", kwargs={"kind": "articles"})),
+            ("Volume suggestions", reverse("corpus:suggest", kwargs={"kind": "volumes"})),
+            ("Issue suggestions", reverse("corpus:suggest", kwargs={"kind": "issues"})),
+        ]:
+            response = client.get(url)
+            check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
+
         if article:
             response = client.get(article.get_absolute_url())
             check(
@@ -82,6 +100,20 @@ class Command(BaseCommand):
                 response.status_code == 200,
                 f"HTTP {response.status_code}",
                 f"HTTP {response.status_code}",
+            )
+            text_response = client.get(reverse("corpus:article-text-data", kwargs={"slug": article.slug}))
+            check(
+                "Article text feed",
+                text_response.status_code == 200,
+                f"HTTP {text_response.status_code}",
+                f"HTTP {text_response.status_code}",
+            )
+            highlight_response = client.get(reverse("corpus:article-highlights", kwargs={"slug": article.slug}))
+            check(
+                "Article highlight feed",
+                highlight_response.status_code == 200,
+                f"HTTP {highlight_response.status_code}",
+                f"HTTP {highlight_response.status_code}",
             )
             article_file = ArticleFile.objects.filter(article=article).first()
             if article_file:
@@ -136,6 +168,7 @@ class Command(BaseCommand):
             client.force_login(researcher)
             for name, url_name in [
                 ("Dashboard page", "accounts:dashboard"),
+                ("Highlight list page", "accounts:highlights"),
                 ("Saved query list", "corpus:saved-query-list"),
                 ("Saved subcorpus list", "corpus:subcorpus-list"),
             ]:

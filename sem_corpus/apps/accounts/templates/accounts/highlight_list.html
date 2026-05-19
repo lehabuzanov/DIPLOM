@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block title %}Пометки | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-end">
+    <div>
+        <h1 class="h2 mb-1">Пометки</h1>
+        <p class="mb-0">Выделенные фрагменты статей для повторного чтения и быстрого возвращения к нужным местам.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'accounts:dashboard' %}">Личный кабинет</a>
+</div>
+
+{% if highlight_groups %}
+    <div class="accordion notes-accordion" id="highlightAccordion">
+        {% for group in highlight_groups %}
+            <div class="accordion-item surface-card overflow-hidden">
+                <h2 class="accordion-header">
+                    <button
+                        class="accordion-button {% if not forloop.first %}collapsed{% endif %}"
+                        type="button"
+                        data-bs-toggle="collapse"
+                        data-bs-target="#highlight-group-{{ group.article.pk }}"
+                    >
+                        <span class="notes-article-title">{{ group.article.title }}</span>
+                        <span class="badge text-bg-light border ms-auto me-3">{{ group.highlights|length }} пометок</span>
+                    </button>
+                </h2>
+                <div
+                    id="highlight-group-{{ group.article.pk }}"
+                    class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                    data-bs-parent="#highlightAccordion"
+                >
+                    <div class="accordion-body" data-highlight-group>
+                        <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center mb-3">
+                            <div class="small text-secondary">
+                                {{ group.article.issue.year }} · Том {{ group.article.issue.volume }}, № {{ group.article.issue.number }}
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-note-prev aria-label="Предыдущая пометка">&larr;</button>
+                                <span class="small text-secondary notes-counter" data-note-counter></span>
+                                <button class="btn btn-sm btn-outline-secondary" type="button" data-note-next aria-label="Следующая пометка">&rarr;</button>
+                            </div>
+                        </div>
+                        {% for highlight in group.highlights %}
+                            <div class="saved-highlight {% if not forloop.first %}d-none{% endif %}" data-note-panel>
+                                <blockquote class="saved-highlight-text mb-3">{{ highlight.selected_text }}</blockquote>
+                                <form method="post" action="{% url 'corpus:article-highlight-edit' highlight.pk %}" class="saved-highlight-note-form mb-3">
+                                    {% csrf_token %}
+                                    <label class="small fw-semibold" for="highlight-note-{{ highlight.pk }}">Личный комментарий</label>
+                                    <textarea
+                                        class="form-control"
+                                        id="highlight-note-{{ highlight.pk }}"
+                                        name="note_text"
+                                        rows="3"
+                                        maxlength="1200"
+                                        placeholder="Например: аргумент для обзора, удачная формулировка, место для сопоставления..."
+                                    >{{ highlight.note_text }}</textarea>
+                                    <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center mt-2">
+                                        <span class="small text-secondary">Сам выделенный фрагмент сохраняется как точная цитата из статьи.</span>
+                                        <button class="btn btn-sm btn-outline-primary" type="submit">Сохранить комментарий</button>
+                                    </div>
+                                </form>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <a class="btn btn-sm btn-primary" href="{{ group.article.get_absolute_url }}?highlight={{ highlight.pk }}">Открыть в статье</a>
+                                    <form method="post" action="{% url 'corpus:article-highlight-delete' highlight.pk %}">
+                                        {% csrf_token %}
+                                        <button class="btn btn-sm btn-outline-secondary" type="submit">Удалить</button>
+                                    </form>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+{% else %}
+    <div class="card surface-card">
+        <div class="card-body p-4">
+            <h2 class="h5">Пока нет пометок</h2>
+            <p class="text-secondary mb-0">Откройте статью, выделите нужный фрагмент текста и сохраните его как пометку.</p>
+        </div>
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.querySelectorAll("[data-highlight-group]").forEach(function (group) {
+        const panels = Array.from(group.querySelectorAll("[data-note-panel]"));
+        const previousButton = group.querySelector("[data-note-prev]");
+        const nextButton = group.querySelector("[data-note-next]");
+        const counter = group.querySelector("[data-note-counter]");
+        let activeIndex = 0;
+
+        function render() {
+            panels.forEach(function (panel, index) {
+                panel.classList.toggle("d-none", index !== activeIndex);
+            });
+            counter.textContent = panels.length ? (activeIndex + 1) + " из " + panels.length : "";
+        }
+
+        previousButton.addEventListener("click", function () {
+            activeIndex = (activeIndex - 1 + panels.length) % panels.length;
+            render();
+        });
+        nextButton.addEventListener("click", function () {
+            activeIndex = (activeIndex + 1) % panels.length;
+            render();
+        });
+        render();
+    });
+</script>
+{% endblock %}

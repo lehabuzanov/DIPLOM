@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from pathlib import Path
 
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
-from django.db.models import Q
-from django.http import FileResponse, Http404, HttpResponse
+from django.db.models import Count, Q
+from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.text import slugify
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
+from razdel import sentenize
 
 from sem_corpus.apps.accounts.utils import user_can_edit_corpus
 from sem_corpus.apps.corpus.forms import (
@@ -25,6 +27,7 @@ from sem_corpus.apps.corpus.models import (
     Article,
     ArticleAuthor,
     ArticleFile,
+    ArticleHighlight,
     ArticleText,
     Author,
     Issue,
@@ -243,7 +246,38 @@ class IssueListView(ListView):
     paginate_by = 12
 
     def get_queryset(self):
-        return Issue.objects.select_related("journal").prefetch_related("articles").all()
+        return (
+            Issue.objects.select_related("journal")
+            .annotate(
+                article_total=Count("articles", distinct=True),
+            )
+            .order_by("-year", "-publication_date", "-id")
+        )
+
+
+class IssueDetailView(DetailView):
+    template_name = "corpus/issue_detail.html"
+    context_object_name = "issue"
+
+    def get_queryset(self):
+        return Issue.objects.select_related("journal").prefetch_related(
+            "articles__section",
+            "articles__article_authors__author",
+        )
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        articles = list(self.object.articles.all().order_by("section__sort_order", "section__name", "title"))
+        article_total = len(articles)
+        author_ids = set()
+        for article in articles:
+            for author_link in article.article_authors.all():
+                author_ids.add(author_link.author_id)
+
+        context["article_total"] = article_total
+        context["author_total"] = len(author_ids)
+        context["articles"] = articles
+        return context
 
 
 class ArticleListView(ListView):
@@ -304,6 +338,207 @@ class ArticleDetailView(DetailView):
         if self.request.user.is_authenticated:
             context["add_to_subcorpus_form"] = AddToSubcorpusForm(user=self.request.user)
         return context
+
+
+def split_article_chunks(body_text: str, *, max_chars: int = 1200) -> list[dict[str, int | str]]:
+    source = body_text or ""
+    chunks: list[dict[str, int | str]] = []
+    cursor = 0
+
+    def append_range(start: int, end: int) -> None:
+        if end > start:
+            chunks.append({"text": source[start:end], "start": start, "end": end})
+
+    def append_long_range(start: int, end: int) -> None:
+        chunk_start = start
+        while end - chunk_start > max_chars:
+            candidate_end = min(chunk_start + max_chars, end)
+            cut = source.rfind(" ", chunk_start, candidate_end + 1)
+            if cut <= chunk_start:
+                cut = candidate_end
+            append_range(chunk_start, cut)
+            chunk_start = cut
+            while chunk_start < end and source[chunk_start].isspace():
+                chunk_start += 1
+        append_range(chunk_start, end)
+
+    for raw_paragraph in source.split("\n\n"):
+        paragraph_start = source.find(raw_paragraph, cursor)
+        cursor = paragraph_start + len(raw_paragraph) + 2
+        if not raw_paragraph.strip():
+            continue
+
+        left_trim = len(raw_paragraph) - len(raw_paragraph.lstrip())
+        right_trim = len(raw_paragraph.rstrip())
+        paragraph_start += left_trim
+        paragraph_end = paragraph_start + right_trim - left_trim
+        paragraph = source[paragraph_start:paragraph_end]
+
+        if len(paragraph) <= max_chars:
+            append_range(paragraph_start, paragraph_end)
+            continue
+
+        current_start: int | None = None
+        current_end: int | None = None
+        for sentence in sentenize(paragraph):
+            sentence_start = paragraph_start + sentence.start
+            sentence_end = paragraph_start + sentence.stop
+            if sentence_end <= sentence_start:
+                continue
+            if sentence_end - sentence_start > max_chars:
+                if current_start is not None and current_end is not None:
+                    append_range(current_start, current_end)
+                    current_start = None
+                    current_end = None
+                append_long_range(sentence_start, sentence_end)
+                continue
+
+            if current_start is None:
+                current_start = sentence_start
+                current_end = sentence_end
+                continue
+
+            if sentence_end - current_start > max_chars:
+                append_range(current_start, current_end or sentence_start)
+                current_start = sentence_start
+                current_end = sentence_end
+            else:
+                current_end = sentence_end
+
+        if current_start is not None and current_end is not None:
+            append_range(current_start, current_end)
+
+    return chunks
+
+
+class ArticleTextDataView(View):
+    DEFAULT_LIMIT = 8
+    MAX_LIMIT = 24
+
+    def get(self, request, slug, *args, **kwargs):
+        article = get_object_or_404(
+            Article.objects.published().select_related("text"),
+            slug=slug,
+        )
+        article_text = getattr(article, "text", None)
+        chunks = split_article_chunks(article_text.body_text if article_text else "")
+
+        try:
+            offset = max(int(request.GET.get("offset", 0)), 0)
+        except (TypeError, ValueError):
+            offset = 0
+        try:
+            limit = int(request.GET.get("limit", self.DEFAULT_LIMIT))
+        except (TypeError, ValueError):
+            limit = self.DEFAULT_LIMIT
+        limit = min(max(limit, 4), self.MAX_LIMIT)
+
+        rows = chunks[offset : offset + limit]
+        return JsonResponse(
+            {
+                "chunks": rows,
+                "total": len(chunks),
+                "offset": offset,
+                "limit": limit,
+                "has_more": offset + limit < len(chunks),
+            }
+        )
+
+
+class ArticleHighlightDataView(View):
+    MAX_SELECTION_LENGTH = 1600
+
+    def get_article(self, slug: str) -> Article:
+        return get_object_or_404(Article.objects.published().select_related("text"), slug=slug)
+
+    @staticmethod
+    def serialize_highlight(highlight: ArticleHighlight) -> dict[str, int | str]:
+        return {
+            "id": highlight.pk,
+            "start": highlight.char_start,
+            "end": highlight.char_end,
+            "text": highlight.selected_text,
+            "note": highlight.note_text,
+        }
+
+    def get(self, request, slug, *args, **kwargs):
+        article = self.get_article(slug)
+        if not request.user.is_authenticated:
+            return JsonResponse({"items": []})
+        highlights = ArticleHighlight.objects.filter(user=request.user, article=article)
+        return JsonResponse({"items": [self.serialize_highlight(item) for item in highlights]})
+
+    def post(self, request, slug, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return JsonResponse({"error": "Требуется вход в систему."}, status=403)
+
+        article = self.get_article(slug)
+        article_text = getattr(article, "text", None)
+        body_text = article_text.body_text if article_text else ""
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+            start = int(payload.get("start"))
+            end = int(payload.get("end"))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            return JsonResponse({"error": "Некорректные координаты пометки."}, status=400)
+
+        start = max(start, 0)
+        end = min(end, len(body_text))
+        selected_text = body_text[start:end]
+        leading = len(selected_text) - len(selected_text.lstrip())
+        trailing = len(selected_text) - len(selected_text.rstrip())
+        start += leading
+        end -= trailing
+        selected_text = body_text[start:end]
+
+        if end <= start or not selected_text.strip():
+            return JsonResponse({"error": "Выделите фрагмент текста."}, status=400)
+        if len(selected_text) > self.MAX_SELECTION_LENGTH:
+            return JsonResponse({"error": "Пометка слишком длинная. Выберите более короткий фрагмент."}, status=400)
+        if ArticleHighlight.objects.filter(
+            user=request.user,
+            article=article,
+            char_start__lt=end,
+            char_end__gt=start,
+        ).exists():
+            return JsonResponse({"error": "Этот фрагмент уже пересекается с существующей пометкой."}, status=409)
+
+        highlight = ArticleHighlight.objects.create(
+            user=request.user,
+            article=article,
+            char_start=start,
+            char_end=end,
+            selected_text=selected_text,
+        )
+        return JsonResponse(self.serialize_highlight(highlight), status=201)
+
+
+class ArticleHighlightDeleteView(LoginRequiredMixin, View):
+    http_method_names = ["post"]
+
+    def post(self, request, pk, *args, **kwargs):
+        highlight = get_object_or_404(ArticleHighlight, pk=pk, user=request.user)
+        highlight.delete()
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"deleted": True})
+        messages.success(request, "Пометка удалена.")
+        return redirect("accounts:highlights")
+
+
+class ArticleHighlightUpdateView(LoginRequiredMixin, View):
+    MAX_NOTE_LENGTH = 1200
+    http_method_names = ["post"]
+
+    def post(self, request, pk, *args, **kwargs):
+        highlight = get_object_or_404(ArticleHighlight, pk=pk, user=request.user)
+        note_text = (request.POST.get("note_text") or "").strip()
+        if len(note_text) > self.MAX_NOTE_LENGTH:
+            messages.error(request, "Комментарий слишком длинный.")
+            return redirect("accounts:highlights")
+        highlight.note_text = note_text
+        highlight.save(update_fields=["note_text", "updated_at"])
+        messages.success(request, "Комментарий к пометке обновлен.")
+        return redirect("accounts:highlights")
 
 
 class SearchView(TemplateView):
@@ -384,6 +619,55 @@ class ExportSearchResultsView(View):
         response = HttpResponse(export_search_results_csv(results), content_type="text/csv; charset=utf-8")
         response["Content-Disposition"] = 'attachment; filename="search-results.csv"'
         return response
+
+
+class SuggestionView(View):
+    DEFAULT_LIMIT = 20
+    MAX_LIMIT = 400
+
+    @staticmethod
+    def article_sort_key(title: str):
+        normalized = (title or "").strip()
+        first_alpha = next((char for char in normalized if char.isalpha()), "")
+        if "\u0400" <= first_alpha <= "\u04ff":
+            script_rank = 0
+        elif "A" <= first_alpha.upper() <= "Z":
+            script_rank = 1
+        else:
+            script_rank = 2
+        return script_rank, normalized.casefold()
+
+    def get_values(self, kind: str, query: str):
+        if kind == "articles":
+            queryset = Article.objects.published()
+            if query:
+                queryset = queryset.filter(title__icontains=query)
+            titles = list(queryset.values_list("title", flat=True))
+            titles.sort(key=self.article_sort_key)
+            return titles[: self.limit]
+
+        if kind == "volumes":
+            queryset = Issue.objects.order_by("volume").values_list("volume", flat=True).distinct()
+        elif kind == "issues":
+            queryset = Issue.objects.order_by("number").values_list("number", flat=True).distinct()
+        else:
+            raise Http404("Unknown suggestion source.")
+
+        values = [value for value in queryset if value]
+        if query:
+            normalized_query = query.casefold()
+            values = [value for value in values if normalized_query in value.casefold()]
+        return values[: self.limit]
+
+    def get(self, request, kind, *args, **kwargs):
+        default_limit = self.MAX_LIMIT if kind == "articles" and not (request.GET.get("q") or "").strip() else self.DEFAULT_LIMIT
+        try:
+            requested_limit = int(request.GET.get("limit", default_limit))
+        except (TypeError, ValueError):
+            requested_limit = default_limit
+        self.limit = min(max(requested_limit, 1), self.MAX_LIMIT)
+        query = (request.GET.get("q") or "").strip()
+        return JsonResponse({"items": self.get_values(kind, query)})
 
 
 class SaveQueryView(LoginRequiredMixin, FormView):

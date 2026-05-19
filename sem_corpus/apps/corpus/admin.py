@@ -5,6 +5,7 @@ from sem_corpus.apps.corpus.models import (
     Article,
     ArticleAuthor,
     ArticleFile,
+    ArticleHighlight,
     ArticleText,
     ArticleToken,
     Author,
@@ -81,6 +82,13 @@ class ArticleAdmin(admin.ModelAdmin):
 class ArticleTextAdmin(admin.ModelAdmin):
     list_display = ("article", "token_count", "lemma_count", "updated_at")
     search_fields = ("article__title", "cleaned_text", "body_text")
+
+
+@admin.register(ArticleHighlight)
+class ArticleHighlightAdmin(admin.ModelAdmin):
+    list_display = ("article", "user", "char_start", "char_end", "created_at")
+    list_filter = ("created_at",)
+    search_fields = ("article__title", "user__username", "selected_text", "note_text")
 
 
 @admin.register(Lemma)

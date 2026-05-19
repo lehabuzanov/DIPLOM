@@ -79,76 +79,94 @@
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
-                    <div class="d-flex align-items-center gap-2">
-                        <h2 class="h4 mb-0">Частотный список</h2>
-                        <span class="inline-help-badge" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
+                <div class="analytics-card-head">
+                    <h2 class="h4 mb-0">Частотный список</h2>
+                    <div class="analytics-inline-search">
+                        <input
+                            class="form-control analytics-filter-input"
+                            type="search"
+                            placeholder="{% if mode == 'word' %}Найти словоформу{% else %}Найти лемму{% endif %}"
+                            data-dataset="frequency"
+                            data-body-id="frequency-table-body"
+                            data-status-id="frequency-table-status"
+                            data-total-id="frequency-table-total"
+                            data-scrollbox-id="frequency-scrollbox"
+                        >
                     </div>
-                    <div class="d-flex align-items-center gap-3 flex-wrap">
-                        <span class="small text-secondary">{{ selected_scope_label }}</span>
-                        {% if frequency_rows %}
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=frequency">Экспорт CSV</a>
-                        {% endif %}
+                    <div class="analytics-card-meta">
+                        <div class="analytics-mode-meta">
+                            <span class="small text-secondary analytics-scope-meta" title="Активный режим фильтрации статистики">
+                                <span>{{ filter_mode_label }}</span>
+                                <span class="inline-help-badge inline-help-badge-strong" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
+                            </span>
+                        </div>
+                        <div class="analytics-info-row">
+                            <span class="small text-secondary analytics-total-meta" id="frequency-table-total">Загрузка...</span>
+                            <a class="btn btn-sm btn-outline-primary analytics-export-btn" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=frequency"><span class="analytics-export-label">Экспорт CSV</span></a>
+                        </div>
                     </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm">
+                <div class="analytics-scroll-table table-responsive" id="frequency-scrollbox">
+                    <table class="table table-sm analytics-data-table">
                         <thead>
                             <tr>
                                 <th>Единица</th>
                                 <th class="text-end">Частота</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for row in frequency_rows %}
-                                <tr>
-                                    <td>{{ row.label }}</td>
-                                    <td class="text-end">{{ row.count }}</td>
-                                </tr>
-                            {% empty %}
-                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
-                            {% endfor %}
+                        <tbody id="frequency-table-body">
+                            <tr><td colspan="2" class="text-secondary">Загрузка списка…</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <p class="analytics-table-status small text-secondary mb-0 d-none" id="frequency-table-status">Подготавливаем данные…</p>
             </div>
         </div>
     </div>
     <div class="col-lg-6">
         <div class="card surface-card h-100">
             <div class="card-body p-4">
-                <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
-                    <div class="d-flex align-items-center gap-2">
-                        <h2 class="h4 mb-0">Биграммы</h2>
-                        <span class="inline-help-badge" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
+                <div class="analytics-card-head">
+                    <h2 class="h4 mb-0">Биграммы</h2>
+                    <div class="analytics-inline-search">
+                        <input
+                            class="form-control analytics-filter-input"
+                            type="search"
+                            placeholder="Найти биграмму"
+                            data-dataset="bigrams"
+                            data-body-id="bigram-table-body"
+                            data-status-id="bigram-table-status"
+                            data-total-id="bigram-table-total"
+                            data-scrollbox-id="bigram-scrollbox"
+                        >
                     </div>
-                    <div class="d-flex align-items-center gap-3 flex-wrap">
-                        <span class="small text-secondary">{{ selected_scope_label }}</span>
-                        {% if bigram_rows %}
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=bigrams">Экспорт CSV</a>
-                        {% endif %}
+                    <div class="analytics-card-meta">
+                        <div class="analytics-mode-meta">
+                            <span class="small text-secondary analytics-scope-meta" title="Активный режим фильтрации статистики">
+                                <span>{{ filter_mode_label }}</span>
+                                <span class="inline-help-badge inline-help-badge-strong" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
+                            </span>
+                        </div>
+                        <div class="analytics-info-row">
+                            <span class="small text-secondary analytics-total-meta" id="bigram-table-total">Загрузка...</span>
+                            <a class="btn btn-sm btn-outline-primary analytics-export-btn" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=bigrams"><span class="analytics-export-label">Экспорт CSV</span></a>
+                        </div>
                     </div>
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-sm">
+                <div class="analytics-scroll-table table-responsive" id="bigram-scrollbox">
+                    <table class="table table-sm analytics-data-table">
                         <thead>
                             <tr>
                                 <th>Сочетание</th>
                                 <th class="text-end">Частота</th>
                             </tr>
                         </thead>
-                        <tbody>
-                            {% for row in bigram_rows %}
-                                <tr>
-                                    <td>{{ row.label }}</td>
-                                    <td class="text-end">{{ row.count }}</td>
-                                </tr>
-                            {% empty %}
-                                <tr><td colspan="2" class="text-secondary">Нет данных.</td></tr>
-                            {% endfor %}
+                        <tbody id="bigram-table-body">
+                            <tr><td colspan="2" class="text-secondary">Загрузка списка…</td></tr>
                         </tbody>
                     </table>
                 </div>
+                <p class="analytics-table-status small text-secondary mb-0 d-none" id="bigram-table-status">Подготавливаем данные…</p>
             </div>
         </div>
     </div>
@@ -157,41 +175,56 @@
 <div class="card surface-card mt-4">
     <div class="card-body p-4">
         <div class="d-flex justify-content-between align-items-center mb-3 gap-3 flex-wrap">
-            <h2 class="h4 mb-0">Сравнение материалов A/B</h2>
+            <div>
+                <h2 class="h4 mb-1">Общие единицы материалов A/B</h2>
+                <p class="text-secondary mb-0">Показываются леммы или словоформы, которые есть в обоих выбранных материалах.</p>
+            </div>
             <div class="d-flex align-items-center gap-3 flex-wrap">
                 {% if comparison_scope_label %}<span class="small text-secondary">{{ comparison_scope_label }}</span>{% endif %}
-                {% if comparison_rows %}
-                    <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=comparison">Экспорт CSV</a>
+                {% if comparison_ready %}
+                    <a class="btn btn-sm btn-outline-primary analytics-export-btn" href="{% url 'analytics:export-csv' %}?{{ request.GET.urlencode }}&export=comparison"><span class="analytics-export-label">Экспорт CSV</span></a>
                 {% endif %}
             </div>
         </div>
         {% if comparison_note %}
             <p class="text-secondary mb-0">{{ comparison_note }}</p>
-        {% else %}
-            <div class="table-responsive">
-                <table class="table">
+        {% elif comparison_ready %}
+            <div class="analytics-comparison-controls mb-3">
+                <div class="analytics-inline-search comparison-search">
+                    <input
+                        class="form-control"
+                        id="comparison-filter-input"
+                        type="search"
+                        placeholder="{% if mode == 'word' %}Найти словоформу{% else %}Найти лемму{% endif %}"
+                    >
+                </div>
+                <select class="form-select comparison-sort-select" id="comparison-sort-select">
+                    <option value="shared_desc">Совпадения: больше сначала</option>
+                    <option value="shared_asc">Совпадения: меньше сначала</option>
+                    <option value="left_desc">Материал A: больше сначала</option>
+                    <option value="right_desc">Материал B: больше сначала</option>
+                    <option value="alpha">По алфавиту</option>
+                </select>
+            </div>
+            <div class="analytics-scroll-table analytics-comparison-scroll table-responsive" id="comparison-scrollbox">
+                <table class="table analytics-data-table">
                     <thead>
                         <tr>
                             <th>Единица</th>
                             <th class="text-end">Материал A</th>
                             <th class="text-end">Материал B</th>
-                            <th class="text-end">Разница</th>
+                            <th class="text-end">Совпадения</th>
+                            <th class="text-end">Всего</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for row in comparison_rows %}
-                            <tr>
-                                <td>{{ row.label }}</td>
-                                <td class="text-end">{{ row.left_count }}</td>
-                                <td class="text-end">{{ row.right_count }}</td>
-                                <td class="text-end">{{ row.delta }}</td>
-                            </tr>
-                        {% empty %}
-                            <tr><td colspan="4" class="text-secondary">Выберите две статьи или два подкорпуса для сравнения.</td></tr>
-                        {% endfor %}
+                    <tbody id="comparison-table-body">
+                        <tr><td colspan="5" class="text-secondary">Загрузка списка...</td></tr>
                     </tbody>
                 </table>
             </div>
+            <p class="analytics-table-status small text-secondary mb-0" id="comparison-table-status">Подготавливаем данные...</p>
+        {% else %}
+            <p class="text-secondary mb-0">Выберите две статьи или два подкорпуса для сравнения.</p>
         {% endif %}
     </div>
 </div>
@@ -199,6 +232,7 @@
 
 {% block extra_js %}
 <script>
+    const analyticsDataUrl = "{% url 'analytics:data' %}";
     const yearLabels = [{% for row in articles_per_year %}"{{ row.issue__year }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
     const yearTotals = [{% for row in articles_per_year %}{{ row.total }}{% if not forloop.last %}, {% endif %}{% endfor %}];
     const authorLabels = [{% for row in top_authors %}"{{ row.label|escapejs }}"{% if not forloop.last %}, {% endif %}{% endfor %}];
@@ -241,5 +275,266 @@
             }
         }
     });
+
+    function escapeHtml(value) {
+        return String(value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function setupAnalyticsTable(input) {
+        const dataset = input.dataset.dataset;
+        const body = document.getElementById(input.dataset.bodyId);
+        const status = document.getElementById(input.dataset.statusId);
+        const totalNode = document.getElementById(input.dataset.totalId);
+        const scrollbox = document.getElementById(input.dataset.scrollboxId);
+        if (!dataset || !body || !status || !totalNode || !scrollbox) {
+            return;
+        }
+
+        const batchSize = 35;
+        let offset = 0;
+        let total = 0;
+        let hasMore = false;
+        let loading = false;
+        let query = "";
+        let debounceTimer = null;
+        let requestSerial = 0;
+        let pendingReset = false;
+        let activeController = null;
+
+        function renderStatus() {
+            if (!total) {
+                totalNode.textContent = "0 ед.";
+                return;
+            }
+            totalNode.textContent = total + " ед.";
+        }
+
+        function appendRows(rows, highlight) {
+            if (!rows.length && !offset) {
+                body.innerHTML = '<tr><td colspan="2" class="text-secondary">Совпадений не найдено.</td></tr>';
+                renderStatus();
+                return;
+            }
+            const html = rows.map(function (row) {
+                return '<tr' + (highlight ? ' class="analytics-row-match"' : '') + '>' +
+                    '<td>' + escapeHtml(row.label) + '</td>' +
+                    '<td class="text-end">' + row.count + '</td>' +
+                    '</tr>';
+            }).join("");
+            body.insertAdjacentHTML("beforeend", html);
+        }
+
+        function buildUrl(reset) {
+            const params = new URLSearchParams(window.location.search);
+            params.delete("export");
+            params.set("dataset", dataset);
+            params.set("offset", reset ? "0" : String(offset));
+            params.set("limit", String(batchSize));
+            if (query) {
+                params.set("q", query);
+            } else {
+                params.delete("q");
+            }
+            return analyticsDataUrl + "?" + params.toString();
+        }
+
+        async function loadRows(reset) {
+            if (reset && activeController) {
+                activeController.abort();
+            }
+            if (loading) {
+                if (reset) {
+                    pendingReset = true;
+                }
+                return;
+            }
+            if (!reset && !hasMore && offset > 0) {
+                return;
+            }
+
+            loading = true;
+            pendingReset = false;
+            const requestId = ++requestSerial;
+            const controller = new AbortController();
+            activeController = controller;
+
+            if (reset) {
+                offset = 0;
+                total = 0;
+                hasMore = false;
+                body.innerHTML = '<tr><td colspan="2" class="text-secondary">Загрузка списка…</td></tr>';
+                scrollbox.scrollTop = 0;
+            }
+
+            try {
+                const response = await fetch(buildUrl(reset), {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    signal: controller.signal,
+                });
+                const payload = await response.json();
+                if (requestId !== requestSerial) {
+                    return;
+                }
+
+                if (reset) {
+                    body.innerHTML = "";
+                }
+
+                total = payload.total || 0;
+                hasMore = Boolean(payload.has_more);
+                appendRows(payload.rows || [], Boolean(query));
+                offset += (payload.rows || []).length;
+                renderStatus();
+            } catch (error) {
+                if (error && error.name === "AbortError") {
+                    return;
+                }
+                body.innerHTML = '<tr><td colspan="2" class="text-secondary">Не удалось загрузить данные.</td></tr>';
+                totalNode.textContent = "Ошибка";
+            } finally {
+                if (activeController === controller) {
+                    activeController = null;
+                }
+                loading = false;
+                if (pendingReset) {
+                    pendingReset = false;
+                    loadRows(true);
+                }
+            }
+        }
+
+        scrollbox.addEventListener("scroll", function () {
+            if (scrollbox.scrollTop + scrollbox.clientHeight >= scrollbox.scrollHeight - 48) {
+                loadRows(false);
+            }
+        });
+
+        input.addEventListener("input", function () {
+            query = input.value.trim().toLowerCase();
+            window.clearTimeout(debounceTimer);
+            debounceTimer = window.setTimeout(function () {
+                loadRows(true);
+            }, 160);
+        });
+
+        loadRows(true);
+    }
+
+    document.querySelectorAll(".analytics-filter-input").forEach(setupAnalyticsTable);
+
+    function setupComparisonTable() {
+        const input = document.getElementById("comparison-filter-input");
+        const sortSelect = document.getElementById("comparison-sort-select");
+        const body = document.getElementById("comparison-table-body");
+        const status = document.getElementById("comparison-table-status");
+        const scrollbox = document.getElementById("comparison-scrollbox");
+        if (!input || !sortSelect || !body || !status || !scrollbox) {
+            return;
+        }
+
+        const batchSize = 35;
+        let offset = 0;
+        let total = 0;
+        let hasMore = false;
+        let loading = false;
+        let query = "";
+        let debounceTimer = null;
+
+        function renderStatus() {
+            status.textContent = total
+                ? "Показано " + offset + " из " + total + " общих единиц"
+                : "Общие единицы не найдены";
+        }
+
+        function appendRows(rows) {
+            if (!rows.length && !offset) {
+                body.innerHTML = '<tr><td colspan="5" class="text-secondary">Общие единицы не найдены.</td></tr>';
+                renderStatus();
+                return;
+            }
+            const html = rows.map(function (row) {
+                return '<tr' + (query ? ' class="analytics-row-match"' : '') + '>' +
+                    '<td>' + escapeHtml(row.label) + '</td>' +
+                    '<td class="text-end">' + row.left_count + '</td>' +
+                    '<td class="text-end">' + row.right_count + '</td>' +
+                    '<td class="text-end">' + row.shared_count + '</td>' +
+                    '<td class="text-end">' + row.total_count + '</td>' +
+                    '</tr>';
+            }).join("");
+            body.insertAdjacentHTML("beforeend", html);
+        }
+
+        function buildUrl(reset) {
+            const params = new URLSearchParams(window.location.search);
+            params.delete("export");
+            params.set("dataset", "comparison");
+            params.set("offset", reset ? "0" : String(offset));
+            params.set("limit", String(batchSize));
+            params.set("sort", sortSelect.value);
+            if (query) {
+                params.set("q", query);
+            } else {
+                params.delete("q");
+            }
+            return analyticsDataUrl + "?" + params.toString();
+        }
+
+        async function loadRows(reset) {
+            if (loading || (!reset && !hasMore && offset > 0)) {
+                return;
+            }
+            loading = true;
+            if (reset) {
+                offset = 0;
+                total = 0;
+                hasMore = false;
+                body.innerHTML = '<tr><td colspan="5" class="text-secondary">Загрузка списка...</td></tr>';
+                scrollbox.scrollTop = 0;
+            }
+            try {
+                const response = await fetch(buildUrl(reset), {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                });
+                const payload = await response.json();
+                if (reset) {
+                    body.innerHTML = "";
+                }
+                total = payload.total || 0;
+                hasMore = Boolean(payload.has_more);
+                appendRows(payload.rows || []);
+                offset += (payload.rows || []).length;
+                renderStatus();
+            } catch (error) {
+                body.innerHTML = '<tr><td colspan="5" class="text-secondary">Не удалось загрузить данные.</td></tr>';
+                status.textContent = "Ошибка загрузки";
+            } finally {
+                loading = false;
+            }
+        }
+
+        scrollbox.addEventListener("scroll", function () {
+            if (scrollbox.scrollTop + scrollbox.clientHeight >= scrollbox.scrollHeight - 48) {
+                loadRows(false);
+            }
+        });
+        input.addEventListener("input", function () {
+            query = input.value.trim().toLowerCase();
+            window.clearTimeout(debounceTimer);
+            debounceTimer = window.setTimeout(function () {
+                loadRows(true);
+            }, 160);
+        });
+        sortSelect.addEventListener("change", function () {
+            loadRows(true);
+        });
+        loadRows(true);
+    }
+
+    setupComparisonTable();
 </script>
 {% endblock %}
