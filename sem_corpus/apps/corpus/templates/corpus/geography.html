@@ -2,6 +2,10 @@
 
 {% block title %}География авторов | {{ site_short_title }}{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+{% endblock %}
+
 {% block content %}
 <div class="page-head d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-end">
     <div>
@@ -17,6 +21,7 @@
             <div class="col-md-4 col-xl-3">
                 <label for="geo-year">Год выпуска</label>
                 <select class="form-select" id="geo-year" name="year">
+                    <option value="" {% if not selected_year %}selected{% endif %}>Все время</option>
                     {% for year in year_values %}
                         <option value="{{ year }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>{{ year }}</option>
                     {% endfor %}
@@ -89,40 +94,12 @@
                 </div>
 
                 {% if map_points %}
-                    <div class="geo-map-shell">
-                        <svg class="geo-map" viewBox="0 0 100 56" role="img" aria-label="Карта городов авторов">
-                            <defs>
-                                <linearGradient id="geoWater" x1="0" y1="0" x2="1" y2="1">
-                                    <stop offset="0" stop-color="#f6fbfe" />
-                                    <stop offset="1" stop-color="#e8f2f8" />
-                                </linearGradient>
-                            </defs>
-                            <rect x="0" y="0" width="100" height="56" rx="4" fill="url(#geoWater)" />
-                            <path d="M5 39 C18 31, 25 33, 35 25 C47 15, 58 16, 70 20 C82 24, 91 19, 96 12" fill="none" stroke="#c7dbea" stroke-width="1.2" />
-                            <path d="M6 45 C20 42, 33 39, 48 42 C63 45, 80 43, 95 35" fill="none" stroke="#d7e7f0" stroke-width="1" />
-                            <g stroke="#d6e6ef" stroke-width="0.35">
-                                <line x1="20" y1="6" x2="20" y2="50" />
-                                <line x1="40" y1="6" x2="40" y2="50" />
-                                <line x1="60" y1="6" x2="60" y2="50" />
-                                <line x1="80" y1="6" x2="80" y2="50" />
-                                <line x1="8" y1="16" x2="94" y2="16" />
-                                <line x1="8" y1="30" x2="94" y2="30" />
-                                <line x1="8" y1="44" x2="94" y2="44" />
-                            </g>
-                            {% for point in map_points %}
-                                <a href="{% url 'corpus:geography' %}?year={{ selected_year }}&city={{ point.display_name|urlencode }}">
-                                    <circle
-                                        class="geo-map-point"
-                                        cx="{{ point.x }}"
-                                        cy="{{ point.y }}"
-                                        r="{{ point.radius }}"
-                                    >
-                                        <title>{{ point.display_name }}: {{ point.author_count }} авторов, {{ point.article_count }} статей</title>
-                                    </circle>
-                                    <text class="geo-map-label" x="{{ point.x }}" y="{{ point.y|add:'-3' }}">{{ point.display_name }}</text>
-                                </a>
-                            {% endfor %}
-                        </svg>
+                    <div class="geo-map-shell position-relative">
+                        <div id="geoLeafletMap" class="geo-leaflet-map" role="img" aria-label="Интерактивная карта городов авторов"></div>
+                        <div class="geo-map-legend">
+                            <span class="geo-legend-dot"></span>
+                            Размер точки отражает число авторов
+                        </div>
                     </div>
                 {% else %}
                     <div class="empty-state">
@@ -136,7 +113,7 @@
     <div class="col-xl-4">
         <section class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">Лидеры года</h2>
+                <h2 class="h4 mb-3">{% if selected_year %}Лидеры года{% else %}Лидеры за все время{% endif %}</h2>
                 {% if city_rows %}
                     <div class="geo-city-list">
                         {% for row in city_rows|slice:":8" %}
@@ -225,10 +202,83 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     (function () {
+        const mapPoints = {{ map_payload|safe }};
         const topPayload = {{ chart_payload|safe }};
         const timelinePayload = {{ timeline_payload|safe }};
+        const selectedYear = "{{ selected_year|escapejs }}";
+
+        function escapeHtml(value) {
+            return String(value || "").replace(/[&<>"']/g, function (char) {
+                return {
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#039;"
+                }[char];
+            });
+        }
+
+        const mapElement = document.getElementById("geoLeafletMap");
+        if (mapElement && mapPoints.length) {
+            if (window.L) {
+                const map = L.map(mapElement, {
+                    scrollWheelZoom: true,
+                    zoomControl: true
+                });
+                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 18,
+                    attribution: "&copy; OpenStreetMap"
+                }).addTo(map);
+
+                const bounds = [];
+                mapPoints.forEach(function (point) {
+                    const latLng = [point.latitude, point.longitude];
+                    bounds.push(latLng);
+                    const url = new URL("{% url 'corpus:geography' %}", window.location.origin);
+                    if (selectedYear) {
+                        url.searchParams.set("year", selectedYear);
+                    }
+                    url.searchParams.set("city", point.display_name);
+
+                    const marker = L.circleMarker(latLng, {
+                        radius: point.radius,
+                        color: "#ffffff",
+                        weight: 2,
+                        fillColor: "#1f66ff",
+                        fillOpacity: 0.68
+                    }).addTo(map);
+                    const locationLine = [point.country, point.region].filter(Boolean).join(", ");
+                    marker.bindTooltip(point.display_name, {
+                        direction: "top",
+                        sticky: true,
+                        opacity: 0.96
+                    });
+                    marker.bindPopup(
+                        '<div class="geo-popup">' +
+                            '<div class="fw-semibold mb-1">' + escapeHtml(point.display_name) + '</div>' +
+                            '<div class="small text-secondary mb-2">' + escapeHtml(locationLine) + '</div>' +
+                            '<div class="small">Авторов: <strong>' + point.author_count + '</strong></div>' +
+                            '<div class="small">Статей: <strong>' + point.article_count + '</strong></div>' +
+                            '<div class="small mb-2">Организаций: <strong>' + point.affiliation_count + '</strong></div>' +
+                            '<a class="btn btn-sm btn-primary" href="' + url.toString() + '">Открыть город</a>' +
+                        '</div>'
+                    );
+                });
+
+                if (bounds.length === 1) {
+                    map.setView(bounds[0], 6);
+                } else {
+                    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 6 });
+                }
+            } else {
+                mapElement.innerHTML = '<div class="empty-state m-3">Не удалось загрузить интерактивную карту. Проверьте подключение к CDN Leaflet.</div>';
+            }
+        }
+
         const topCanvas = document.getElementById("geoTopCitiesChart");
         if (topCanvas && topPayload.labels.length) {
             new Chart(topCanvas, {

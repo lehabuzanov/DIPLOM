@@ -367,36 +367,6 @@ def resolve_city_filter(raw_value: str) -> CityLocation | None:
     )
 
 
-def project_geo_points(rows: list[dict]) -> list[dict]:
-    if not rows:
-        return []
-    latitudes = [float(row["latitude"]) for row in rows]
-    longitudes = [float(row["longitude"]) for row in rows]
-    min_lat, max_lat = min(latitudes), max(latitudes)
-    min_lon, max_lon = min(longitudes), max(longitudes)
-    if max_lat == min_lat:
-        min_lat -= 1
-        max_lat += 1
-    if max_lon == min_lon:
-        min_lon -= 1
-        max_lon += 1
-    lat_padding = (max_lat - min_lat) * 0.14
-    lon_padding = (max_lon - min_lon) * 0.14
-    min_lat -= lat_padding
-    max_lat += lat_padding
-    min_lon -= lon_padding
-    max_lon += lon_padding
-
-    projected = []
-    max_authors = max(row["author_count"] for row in rows) or 1
-    for row in rows:
-        x = 6 + ((float(row["longitude"]) - min_lon) / (max_lon - min_lon)) * 88
-        y = 8 + ((max_lat - float(row["latitude"])) / (max_lat - min_lat)) * 84
-        radius = 5 + (row["author_count"] / max_authors) * 10
-        projected.append({**row, "x": round(x, 2), "y": round(y, 2), "radius": round(radius, 2)})
-    return projected
-
-
 class GeographyDashboardView(TemplateView):
     template_name = "corpus/geography.html"
 
@@ -411,9 +381,9 @@ class GeographyDashboardView(TemplateView):
             .values_list("article__issue__year", flat=True)
             .distinct()
         )
-        selected_year = self.request.GET.get("year") or (str(year_values[0]) if year_values else "")
+        selected_year = (self.request.GET.get("year") or "").strip()
         if selected_year and selected_year not in {str(year) for year in year_values}:
-            selected_year = str(year_values[0]) if year_values else ""
+            selected_year = ""
 
         selected_city = resolve_city_filter(self.request.GET.get("city", ""))
         base_queryset = ArticleAuthor.objects.filter(
@@ -461,7 +431,22 @@ class GeographyDashboardView(TemplateView):
             }
             for row in city_rows
         ]
-        map_points = project_geo_points(rows)
+        max_authors = max((row["author_count"] for row in rows), default=1)
+        map_points = [
+            {
+                "id": row["id"],
+                "display_name": row["display_name"],
+                "region": row["region"],
+                "country": row["country"],
+                "latitude": float(row["latitude"]),
+                "longitude": float(row["longitude"]),
+                "article_count": row["article_count"],
+                "author_count": row["author_count"],
+                "affiliation_count": row["affiliation_count"],
+                "radius": round(7 + (row["author_count"] / max_authors) * 14, 2),
+            }
+            for row in rows
+        ]
         article_rows = (
             base_queryset.values(
                 "article_id",
@@ -497,6 +482,7 @@ class GeographyDashboardView(TemplateView):
                 "author_total": base_queryset.values("author_id").distinct().count(),
                 "article_total": base_queryset.values("article_id").distinct().count(),
                 "top_city": rows[0] if rows else None,
+                "map_payload": json.dumps(map_points, ensure_ascii=False),
                 "chart_payload": json.dumps(
                     {
                         "labels": [row["display_name"] for row in rows[:10]],

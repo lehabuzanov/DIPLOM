@@ -818,45 +818,64 @@ label {
 
 .geo-map-shell {
     width: 100%;
-    min-height: 23rem;
+    min-height: 31rem;
     border: 1px solid #d8e7f0;
     border-radius: 14px;
     background: var(--surface-soft);
     overflow: hidden;
 }
 
-.geo-map {
-    display: block;
+.geo-leaflet-map {
     width: 100%;
-    height: auto;
-    min-height: 23rem;
+    height: clamp(27rem, 58vh, 42rem);
+    min-height: 27rem;
+    background: #e8f2f8;
 }
 
-.geo-map-point {
-    fill: rgba(31, 102, 255, 0.62);
-    stroke: #ffffff;
-    stroke-width: 0.8;
-    filter: drop-shadow(0 5px 8px rgba(19, 63, 156, 0.2));
-    transition: fill 0.18s ease, transform 0.18s ease;
-    transform-box: fill-box;
-    transform-origin: center;
+.geo-map-legend {
+    position: absolute;
+    left: 1rem;
+    bottom: 1rem;
+    z-index: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.65rem;
+    border: 1px solid #d8e7f0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 10px 24px rgba(24, 50, 79, 0.12);
+    color: var(--ink);
+    font-size: 0.88rem;
 }
 
-.geo-map a:hover .geo-map-point,
-.geo-map a:focus .geo-map-point {
-    fill: rgba(20, 72, 207, 0.82);
-    transform: scale(1.08);
+.geo-legend-dot {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 999px;
+    background: rgba(31, 102, 255, 0.72);
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 1px rgba(31, 102, 255, 0.25);
 }
 
-.geo-map-label {
-    font-size: 2.2px;
+.geo-popup {
+    min-width: 12rem;
+}
+
+.leaflet-container {
+    font-family: "Open Sans", Arial, sans-serif;
+    color: var(--ink);
+}
+
+.leaflet-popup-content {
+    margin: 0.85rem 0.95rem;
+}
+
+.leaflet-tooltip {
+    border-color: #c8d9e4;
+    color: var(--ink);
     font-weight: 700;
-    fill: #173f5f;
-    text-anchor: middle;
-    paint-order: stroke;
-    stroke: rgba(255, 255, 255, 0.92);
-    stroke-width: 0.65;
-    pointer-events: none;
+    box-shadow: 0 8px 20px rgba(24, 50, 79, 0.14);
 }
 
 .geo-city-list {
