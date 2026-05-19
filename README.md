@@ -168,6 +168,7 @@ docker compose exec web python manage.py sync_ojs_journal --skip-existing
 docker compose exec web python manage.py sync_ojs_journal --skip-existing
 docker compose exec web python manage.py repair_article_texts
 docker compose exec web python manage.py rebuild_corpus_index
+docker compose exec web python manage.py refresh_author_geography
 docker compose exec web python manage.py selfcheck_corpus
 docker compose exec web python manage.py import_corpus_batch --source sample_data/batch_import
 ```

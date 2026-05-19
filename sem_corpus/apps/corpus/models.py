@@ -103,6 +103,16 @@ class Affiliation(TimestampedModel):
     city = models.CharField("город", max_length=128, blank=True)
     country = models.CharField("страна", max_length=128, blank=True)
     website = models.URLField("сайт", blank=True)
+    city_location = models.ForeignKey(
+        "CityLocation",
+        on_delete=models.SET_NULL,
+        related_name="affiliations",
+        verbose_name="географическая привязка",
+        null=True,
+        blank=True,
+    )
+    geography_source = models.CharField("источник геопривязки", max_length=64, blank=True)
+    geography_confidence = models.FloatField("уверенность геопривязки", default=0)
 
     class Meta:
         verbose_name = "аффилиация"
@@ -111,6 +121,35 @@ class Affiliation(TimestampedModel):
 
     def __str__(self) -> str:
         return self.name
+
+
+class CityLocation(TimestampedModel):
+    display_name = models.CharField("город", max_length=128)
+    normalized_name = models.CharField("нормализованное название", max_length=128)
+    region = models.CharField("регион", max_length=128, blank=True)
+    country = models.CharField("страна", max_length=128, default="Россия")
+    latitude = models.DecimalField("широта", max_digits=9, decimal_places=6)
+    longitude = models.DecimalField("долгота", max_digits=9, decimal_places=6)
+    geocode_source = models.CharField("источник координат", max_length=64, default="gazetteer")
+    is_verified = models.BooleanField("проверено", default=False)
+    needs_review = models.BooleanField("нужна проверка", default=False)
+
+    class Meta:
+        verbose_name = "город"
+        verbose_name_plural = "города"
+        ordering = ["country", "display_name"]
+        constraints = [
+            models.UniqueConstraint(fields=["normalized_name", "country"], name="unique_city_location_country")
+        ]
+        indexes = [
+            models.Index(fields=["normalized_name"]),
+            models.Index(fields=["country"]),
+        ]
+
+    def __str__(self) -> str:
+        if self.region:
+            return f"{self.display_name}, {self.region}"
+        return self.display_name
 
 
 class Author(TimestampedModel):

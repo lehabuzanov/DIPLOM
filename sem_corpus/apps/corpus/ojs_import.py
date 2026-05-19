@@ -25,6 +25,7 @@ from sem_corpus.apps.corpus.models import (
     Journal,
     Section,
 )
+from sem_corpus.apps.corpus.geo import assign_affiliation_geography
 from sem_corpus.apps.corpus.services import clean_article_body_text, sync_keywords_for_article
 
 
@@ -357,6 +358,7 @@ def get_or_create_author(display_name: str, affiliation_name: str) -> tuple[Auth
     affiliation = None
     if cleaned_affiliation := normalize_whitespace(affiliation_name):
         affiliation, _ = Affiliation.objects.get_or_create(name=cleaned_affiliation)
+        assign_affiliation_geography(affiliation)
         author.affiliations.add(affiliation)
     return author, affiliation
 

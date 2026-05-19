@@ -43,6 +43,7 @@
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:issue-list' %}">Выпуски</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:article-list' %}">Статьи</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'corpus:search' %}">Поиск</a></li>
+                            <li class="nav-item"><a class="nav-link" href="{% url 'corpus:geography' %}">Карта</a></li>
                             <li class="nav-item"><a class="nav-link" href="{% url 'analytics:dashboard' %}">Аналитика</a></li>
                             {% if request.user.is_authenticated %}
                                 <li class="nav-item"><a class="nav-link" href="{% url 'corpus:subcorpus-list' %}">Подкорпуса</a></li>

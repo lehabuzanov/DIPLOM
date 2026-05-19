@@ -11,6 +11,7 @@ from sem_corpus.apps.corpus.views import (
     ArticleTextDataView,
     EditorArticleUploadView,
     ExportSearchResultsView,
+    GeographyDashboardView,
     IssueDetailView,
     IssueListView,
     SaveQueryView,
@@ -33,6 +34,7 @@ app_name = "corpus"
 urlpatterns = [
     path("issues/", IssueListView.as_view(), name="issue-list"),
     path("issues/<int:pk>/", IssueDetailView.as_view(), name="issue-detail"),
+    path("geography/", GeographyDashboardView.as_view(), name="geography"),
     path("articles/", ArticleListView.as_view(), name="article-list"),
     path("articles/upload/", EditorArticleUploadView.as_view(), name="editor-upload"),
     path("articles/<str:slug>/text/", ArticleTextDataView.as_view(), name="article-text-data"),

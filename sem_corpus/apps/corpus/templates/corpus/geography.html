@@ -1,0 +1,271 @@
+{% extends "base.html" %}
+
+{% block title %}География авторов | {{ site_short_title }}{% endblock %}
+
+{% block content %}
+<div class="page-head d-flex flex-column flex-lg-row justify-content-between gap-3 align-items-lg-end">
+    <div>
+        <h1 class="h2 mb-1">География авторов</h1>
+        <p class="mb-0">Карта показывает, из каких городов представлены авторы журнала, и помогает быстро увидеть вклад городов по выбранному году.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="{% url 'analytics:dashboard' %}">Аналитика</a>
+</div>
+
+<form class="card surface-card mb-4" method="get">
+    <div class="card-body p-4">
+        <div class="row g-3 align-items-end">
+            <div class="col-md-4 col-xl-3">
+                <label for="geo-year">Год выпуска</label>
+                <select class="form-select" id="geo-year" name="year">
+                    {% for year in year_values %}
+                        <option value="{{ year }}" {% if selected_year == year|stringformat:"s" %}selected{% endif %}>{{ year }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5 col-xl-4">
+                <label for="geo-city">Город</label>
+                <input
+                    class="form-control js-suggest-input"
+                    id="geo-city"
+                    name="city"
+                    value="{% if selected_city %}{{ selected_city.display_name }}{% endif %}"
+                    placeholder="Выберите или введите город"
+                    data-suggest-url="{% url 'corpus:suggest' 'cities' %}"
+                    data-suggest-placeholder="Выберите или введите город"
+                >
+            </div>
+            <div class="col-md-3 col-xl-5">
+                <div class="d-flex flex-wrap gap-2">
+                    <button class="btn btn-primary" type="submit">Показать</button>
+                    <a class="btn btn-outline-secondary" href="{% url 'corpus:geography' %}">Сбросить</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</form>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Городов</div>
+            <div class="stat-value">{{ city_total }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Авторов</div>
+            <div class="stat-value">{{ author_total }}</div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="stat-card">
+            <div class="stat-label">Статей</div>
+            <div class="stat-value">{{ article_total }}</div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-xl-8">
+        <section class="card surface-card h-100">
+            <div class="card-body p-4">
+                <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
+                    <div>
+                        <h2 class="h4 mb-1">Карта публикационной географии</h2>
+                        <div class="text-secondary small">
+                            {% if selected_city %}
+                                {{ selected_city.display_name }}{% if selected_year %}, {{ selected_year }}{% endif %}
+                            {% else %}
+                                {% if selected_year %}{{ selected_year }} год{% else %}Все годы{% endif %}
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% if top_city %}
+                        <div class="text-lg-end small">
+                            <span class="text-secondary">Лидер:</span>
+                            <span class="fw-semibold">{{ top_city.display_name }}</span>
+                        </div>
+                    {% endif %}
+                </div>
+
+                {% if map_points %}
+                    <div class="geo-map-shell">
+                        <svg class="geo-map" viewBox="0 0 100 56" role="img" aria-label="Карта городов авторов">
+                            <defs>
+                                <linearGradient id="geoWater" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0" stop-color="#f6fbfe" />
+                                    <stop offset="1" stop-color="#e8f2f8" />
+                                </linearGradient>
+                            </defs>
+                            <rect x="0" y="0" width="100" height="56" rx="4" fill="url(#geoWater)" />
+                            <path d="M5 39 C18 31, 25 33, 35 25 C47 15, 58 16, 70 20 C82 24, 91 19, 96 12" fill="none" stroke="#c7dbea" stroke-width="1.2" />
+                            <path d="M6 45 C20 42, 33 39, 48 42 C63 45, 80 43, 95 35" fill="none" stroke="#d7e7f0" stroke-width="1" />
+                            <g stroke="#d6e6ef" stroke-width="0.35">
+                                <line x1="20" y1="6" x2="20" y2="50" />
+                                <line x1="40" y1="6" x2="40" y2="50" />
+                                <line x1="60" y1="6" x2="60" y2="50" />
+                                <line x1="80" y1="6" x2="80" y2="50" />
+                                <line x1="8" y1="16" x2="94" y2="16" />
+                                <line x1="8" y1="30" x2="94" y2="30" />
+                                <line x1="8" y1="44" x2="94" y2="44" />
+                            </g>
+                            {% for point in map_points %}
+                                <a href="{% url 'corpus:geography' %}?year={{ selected_year }}&city={{ point.display_name|urlencode }}">
+                                    <circle
+                                        class="geo-map-point"
+                                        cx="{{ point.x }}"
+                                        cy="{{ point.y }}"
+                                        r="{{ point.radius }}"
+                                    >
+                                        <title>{{ point.display_name }}: {{ point.author_count }} авторов, {{ point.article_count }} статей</title>
+                                    </circle>
+                                    <text class="geo-map-label" x="{{ point.x }}" y="{{ point.y|add:'-3' }}">{{ point.display_name }}</text>
+                                </a>
+                            {% endfor %}
+                        </svg>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        Для выбранных параметров пока нет географических данных.
+                    </div>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+
+    <div class="col-xl-4">
+        <section class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Лидеры года</h2>
+                {% if city_rows %}
+                    <div class="geo-city-list">
+                        {% for row in city_rows|slice:":8" %}
+                            <a class="geo-city-row" href="{% url 'corpus:geography' %}?year={{ selected_year }}&city={{ row.display_name|urlencode }}">
+                                <span>
+                                    <span class="fw-semibold">{{ row.display_name }}</span>
+                                    <span class="d-block small text-secondary">{{ row.country }}{% if row.region %}, {{ row.region }}{% endif %}</span>
+                                </span>
+                                <span class="text-end">
+                                    <span class="fw-semibold">{{ row.author_count }}</span>
+                                    <span class="d-block small text-secondary">авт.</span>
+                                </span>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-secondary mb-0">Нет городов для выбранного года.</p>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+</div>
+
+<div class="row g-4 mt-1">
+    <div class="col-lg-7">
+        <section class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">Города по активности</h2>
+                {% if city_rows %}
+                    <canvas id="geoTopCitiesChart" height="170"></canvas>
+                {% else %}
+                    <p class="text-secondary mb-0">Недостаточно данных для диаграммы.</p>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+    <div class="col-lg-5">
+        <section class="card surface-card h-100">
+            <div class="card-body p-4">
+                <h2 class="h4 mb-3">
+                    {% if selected_city %}Динамика города{% else %}Как читать карту{% endif %}
+                </h2>
+                {% if selected_city and timeline_rows %}
+                    <canvas id="geoTimelineChart" height="190"></canvas>
+                {% else %}
+                    <p class="text-secondary mb-0">
+                        Размер точки связан с числом авторов. В списке лидеров можно открыть город и посмотреть статьи, связанные с ним.
+                    </p>
+                {% endif %}
+            </div>
+        </section>
+    </div>
+</div>
+
+{% if selected_city %}
+    <section class="card surface-card mt-4">
+        <div class="card-body p-4">
+            <h2 class="h4 mb-3">Статьи города {{ selected_city.display_name }}</h2>
+            {% if article_rows %}
+                <div class="table-responsive">
+                    <table class="table align-middle">
+                        <thead>
+                            <tr>
+                                <th>Статья</th>
+                                <th>Выпуск</th>
+                                <th class="text-end">Авторов из города</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in article_rows %}
+                                <tr>
+                                    <td><a href="{% url 'corpus:article-detail' row.article__slug %}">{{ row.article__title }}</a></td>
+                                    <td>{{ row.article__issue__year }}, т. {{ row.article__issue__volume }}, № {{ row.article__issue__number }}</td>
+                                    <td class="text-end">{{ row.author_count }}</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            {% else %}
+                <p class="text-secondary mb-0">В выбранном году статей для этого города не найдено.</p>
+            {% endif %}
+        </div>
+    </section>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    (function () {
+        const topPayload = {{ chart_payload|safe }};
+        const timelinePayload = {{ timeline_payload|safe }};
+        const topCanvas = document.getElementById("geoTopCitiesChart");
+        if (topCanvas && topPayload.labels.length) {
+            new Chart(topCanvas, {
+                type: "bar",
+                data: {
+                    labels: topPayload.labels,
+                    datasets: [
+                        { label: "Авторы", data: topPayload.authors, backgroundColor: "rgba(31, 102, 255, 0.72)" },
+                        { label: "Статьи", data: topPayload.articles, backgroundColor: "rgba(89, 154, 190, 0.52)" }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: "bottom" } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
+
+        const timelineCanvas = document.getElementById("geoTimelineChart");
+        if (timelineCanvas && timelinePayload.labels.length) {
+            new Chart(timelineCanvas, {
+                type: "line",
+                data: {
+                    labels: timelinePayload.labels,
+                    datasets: [
+                        { label: "Статьи", data: timelinePayload.articles, borderColor: "#1f66ff", backgroundColor: "rgba(31, 102, 255, 0.12)", tension: 0.25, fill: true },
+                        { label: "Авторы", data: timelinePayload.authors, borderColor: "#4d7f9f", backgroundColor: "rgba(77, 127, 159, 0.12)", tension: 0.25 }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { position: "bottom" } },
+                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                }
+            });
+        }
+    }());
+</script>
+{% endblock %}

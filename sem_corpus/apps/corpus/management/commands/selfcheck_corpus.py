@@ -9,7 +9,7 @@ from django.test import Client
 from django.urls import reverse
 
 from sem_corpus.apps.corpus.forms import SearchForm
-from sem_corpus.apps.corpus.models import Article, ArticleFile, ArticleToken, Issue, SavedQuery, SavedSubcorpus
+from sem_corpus.apps.corpus.models import Article, ArticleFile, ArticleToken, CityLocation, Issue, SavedQuery, SavedSubcorpus
 from sem_corpus.apps.corpus.services import search_articles
 
 
@@ -70,6 +70,7 @@ class Command(BaseCommand):
             ("Issue catalog", "corpus:issue-list"),
             ("Article catalog", "corpus:article-list"),
             ("Search", "corpus:search"),
+            ("Geography", "corpus:geography"),
             ("Analytics", "analytics:dashboard"),
         ]:
             response = client.get(reverse(url_name))
@@ -89,6 +90,7 @@ class Command(BaseCommand):
             ("Article suggestions", reverse("corpus:suggest", kwargs={"kind": "articles"})),
             ("Volume suggestions", reverse("corpus:suggest", kwargs={"kind": "volumes"})),
             ("Issue suggestions", reverse("corpus:suggest", kwargs={"kind": "issues"})),
+            ("City suggestions", reverse("corpus:suggest", kwargs={"kind": "cities"})),
         ]:
             response = client.get(url)
             check(name, response.status_code == 200, f"HTTP {response.status_code}", f"HTTP {response.status_code}")
@@ -147,6 +149,12 @@ class Command(BaseCommand):
             )
         else:
             notes.append("Lemma search was skipped because there are no indexed tokens with lemmas yet.")
+
+        city_count = CityLocation.objects.filter(affiliations__article_authors__isnull=False).distinct().count()
+        if city_count:
+            self.stdout.write(self.style.SUCCESS(f"[OK] Author geography: {city_count} city location(s) linked to article authors."))
+        else:
+            notes.append("Author geography has no linked cities yet. Run python manage.py refresh_author_geography.")
 
         if SavedSubcorpus.objects.exists():
             self.stdout.write(

@@ -30,6 +30,7 @@ from sem_corpus.apps.corpus.models import (
     ArticleHighlight,
     ArticleText,
     Author,
+    CityLocation,
     Issue,
     Journal,
     SavedQuery,
@@ -38,6 +39,7 @@ from sem_corpus.apps.corpus.models import (
     Section,
     payload_to_querystring,
 )
+from sem_corpus.apps.corpus.geo import assign_affiliation_geography, normalize_city_name
 from sem_corpus.apps.corpus.services import (
     add_article_to_subcorpus,
     apply_article_filters,
@@ -190,6 +192,7 @@ def create_or_update_editor_article(cleaned_data) -> Article:
         affiliation = None
         if author_payload["affiliation"]:
             affiliation, _ = Affiliation.objects.get_or_create(name=author_payload["affiliation"])
+            assign_affiliation_geography(affiliation)
             author.affiliations.add(affiliation)
 
         ArticleAuthor.objects.create(
@@ -328,7 +331,20 @@ class ArticleDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         article = self.object
+        city_links = []
+        seen_city_ids = set()
+        author_city_rows = ArticleAuthor.objects.filter(
+            article=article,
+            affiliation__city_location__isnull=False,
+        ).select_related("affiliation__city_location")
+        for row in author_city_rows:
+            city = row.affiliation.city_location
+            if city.pk in seen_city_ids:
+                continue
+            seen_city_ids.add(city.pk)
+            city_links.append(city)
         context["article_text"] = getattr(article, "text", None)
+        context["article_cities"] = city_links
         context["related_articles"] = (
             Article.objects.published()
             .filter(section=article.section)
@@ -337,6 +353,168 @@ class ArticleDetailView(DetailView):
         )
         if self.request.user.is_authenticated:
             context["add_to_subcorpus_form"] = AddToSubcorpusForm(user=self.request.user)
+        return context
+
+
+def resolve_city_filter(raw_value: str) -> CityLocation | None:
+    value = normalize_city_name(raw_value)
+    if not value:
+        return None
+    return (
+        CityLocation.objects.filter(normalized_name=value).first()
+        or CityLocation.objects.filter(display_name__iexact=raw_value.strip()).first()
+        or CityLocation.objects.filter(normalized_name__icontains=value).order_by("display_name").first()
+    )
+
+
+def project_geo_points(rows: list[dict]) -> list[dict]:
+    if not rows:
+        return []
+    latitudes = [float(row["latitude"]) for row in rows]
+    longitudes = [float(row["longitude"]) for row in rows]
+    min_lat, max_lat = min(latitudes), max(latitudes)
+    min_lon, max_lon = min(longitudes), max(longitudes)
+    if max_lat == min_lat:
+        min_lat -= 1
+        max_lat += 1
+    if max_lon == min_lon:
+        min_lon -= 1
+        max_lon += 1
+    lat_padding = (max_lat - min_lat) * 0.14
+    lon_padding = (max_lon - min_lon) * 0.14
+    min_lat -= lat_padding
+    max_lat += lat_padding
+    min_lon -= lon_padding
+    max_lon += lon_padding
+
+    projected = []
+    max_authors = max(row["author_count"] for row in rows) or 1
+    for row in rows:
+        x = 6 + ((float(row["longitude"]) - min_lon) / (max_lon - min_lon)) * 88
+        y = 8 + ((max_lat - float(row["latitude"])) / (max_lat - min_lat)) * 84
+        radius = 5 + (row["author_count"] / max_authors) * 10
+        projected.append({**row, "x": round(x, 2), "y": round(y, 2), "radius": round(radius, 2)})
+    return projected
+
+
+class GeographyDashboardView(TemplateView):
+    template_name = "corpus/geography.html"
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        year_values = list(
+            ArticleAuthor.objects.filter(
+                article__is_published=True,
+                affiliation__city_location__isnull=False,
+            )
+            .order_by("-article__issue__year")
+            .values_list("article__issue__year", flat=True)
+            .distinct()
+        )
+        selected_year = self.request.GET.get("year") or (str(year_values[0]) if year_values else "")
+        if selected_year and selected_year not in {str(year) for year in year_values}:
+            selected_year = str(year_values[0]) if year_values else ""
+
+        selected_city = resolve_city_filter(self.request.GET.get("city", ""))
+        base_queryset = ArticleAuthor.objects.filter(
+            article__is_published=True,
+            affiliation__city_location__isnull=False,
+        ).select_related(
+            "article",
+            "article__issue",
+            "author",
+            "affiliation",
+            "affiliation__city_location",
+        )
+        if selected_year:
+            base_queryset = base_queryset.filter(article__issue__year=int(selected_year))
+        if selected_city:
+            base_queryset = base_queryset.filter(affiliation__city_location=selected_city)
+
+        city_rows = list(
+            base_queryset.values(
+                "affiliation__city_location_id",
+                "affiliation__city_location__display_name",
+                "affiliation__city_location__region",
+                "affiliation__city_location__country",
+                "affiliation__city_location__latitude",
+                "affiliation__city_location__longitude",
+            )
+            .annotate(
+                article_count=Count("article", distinct=True),
+                author_count=Count("author", distinct=True),
+                affiliation_count=Count("affiliation", distinct=True),
+            )
+            .order_by("-author_count", "-article_count", "affiliation__city_location__display_name")
+        )
+        rows = [
+            {
+                "id": row["affiliation__city_location_id"],
+                "display_name": row["affiliation__city_location__display_name"],
+                "region": row["affiliation__city_location__region"],
+                "country": row["affiliation__city_location__country"],
+                "latitude": row["affiliation__city_location__latitude"],
+                "longitude": row["affiliation__city_location__longitude"],
+                "article_count": row["article_count"],
+                "author_count": row["author_count"],
+                "affiliation_count": row["affiliation_count"],
+            }
+            for row in city_rows
+        ]
+        map_points = project_geo_points(rows)
+        article_rows = (
+            base_queryset.values(
+                "article_id",
+                "article__title",
+                "article__slug",
+                "article__issue__year",
+                "article__issue__volume",
+                "article__issue__number",
+            )
+            .annotate(author_count=Count("author", distinct=True))
+            .order_by("-article__issue__year", "article__title")[:40]
+        )
+        timeline_rows = list(
+            ArticleAuthor.objects.filter(
+                article__is_published=True,
+                affiliation__city_location=selected_city,
+            )
+            .values("article__issue__year")
+            .annotate(article_count=Count("article", distinct=True), author_count=Count("author", distinct=True))
+            .order_by("article__issue__year")
+        ) if selected_city else []
+
+        context.update(
+            {
+                "year_values": year_values,
+                "selected_year": selected_year,
+                "selected_city": selected_city,
+                "city_rows": rows,
+                "map_points": map_points,
+                "article_rows": article_rows,
+                "timeline_rows": timeline_rows,
+                "city_total": len(rows),
+                "author_total": base_queryset.values("author_id").distinct().count(),
+                "article_total": base_queryset.values("article_id").distinct().count(),
+                "top_city": rows[0] if rows else None,
+                "chart_payload": json.dumps(
+                    {
+                        "labels": [row["display_name"] for row in rows[:10]],
+                        "authors": [row["author_count"] for row in rows[:10]],
+                        "articles": [row["article_count"] for row in rows[:10]],
+                    },
+                    ensure_ascii=False,
+                ),
+                "timeline_payload": json.dumps(
+                    {
+                        "labels": [str(row["article__issue__year"]) for row in timeline_rows],
+                        "articles": [row["article_count"] for row in timeline_rows],
+                        "authors": [row["author_count"] for row in timeline_rows],
+                    },
+                    ensure_ascii=False,
+                ),
+            }
+        )
         return context
 
 
@@ -645,6 +823,12 @@ class SuggestionView(View):
             titles = list(queryset.values_list("title", flat=True))
             titles.sort(key=self.article_sort_key)
             return titles[: self.limit]
+
+        if kind == "cities":
+            queryset = CityLocation.objects.order_by("display_name")
+            if query:
+                queryset = queryset.filter(display_name__icontains=query)
+            return list(queryset.values_list("display_name", flat=True)[: self.limit])
 
         if kind == "volumes":
             queryset = Issue.objects.order_by("volume").values_list("volume", flat=True).distinct()

@@ -9,6 +9,7 @@ from sem_corpus.apps.corpus.models import (
     ArticleText,
     ArticleToken,
     Author,
+    CityLocation,
     Issue,
     Journal,
     Keyword,
@@ -52,8 +53,16 @@ class SectionAdmin(admin.ModelAdmin):
 
 @admin.register(Affiliation)
 class AffiliationAdmin(admin.ModelAdmin):
-    list_display = ("name", "city", "country")
-    search_fields = ("name", "city")
+    list_display = ("name", "city", "country", "city_location", "geography_confidence", "geography_source")
+    list_filter = ("country", "geography_source", "city_location__country")
+    search_fields = ("name", "city", "city_location__display_name")
+
+
+@admin.register(CityLocation)
+class CityLocationAdmin(admin.ModelAdmin):
+    list_display = ("display_name", "region", "country", "latitude", "longitude", "geocode_source", "is_verified")
+    list_filter = ("country", "geocode_source", "is_verified", "needs_review")
+    search_fields = ("display_name", "normalized_name", "region", "country")
 
 
 @admin.register(Author)

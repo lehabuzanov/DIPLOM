@@ -115,6 +115,22 @@
             </div>
         </div>
 
+        {% if article_cities %}
+            <div class="card surface-card mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">География авторов</h2>
+                    <div class="d-flex flex-wrap gap-2">
+                        {% for city in article_cities %}
+                            <a class="section-chip text-decoration-none" href="{% url 'corpus:geography' %}?year={{ article.issue.year }}&city={{ city.display_name|urlencode }}">
+                                {{ city.display_name }}
+                            </a>
+                        {% endfor %}
+                    </div>
+                    <a class="btn btn-sm btn-outline-primary mt-3" href="{% url 'corpus:geography' %}?year={{ article.issue.year }}">Карта выпуска</a>
+                </div>
+            </div>
+        {% endif %}
+
         {% if request.user.is_authenticated %}
             <div class="card surface-card mb-4">
                 <div class="card-body">

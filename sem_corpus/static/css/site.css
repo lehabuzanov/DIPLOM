@@ -816,6 +816,83 @@ label {
     resize: vertical;
 }
 
+.geo-map-shell {
+    width: 100%;
+    min-height: 23rem;
+    border: 1px solid #d8e7f0;
+    border-radius: 14px;
+    background: var(--surface-soft);
+    overflow: hidden;
+}
+
+.geo-map {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 23rem;
+}
+
+.geo-map-point {
+    fill: rgba(31, 102, 255, 0.62);
+    stroke: #ffffff;
+    stroke-width: 0.8;
+    filter: drop-shadow(0 5px 8px rgba(19, 63, 156, 0.2));
+    transition: fill 0.18s ease, transform 0.18s ease;
+    transform-box: fill-box;
+    transform-origin: center;
+}
+
+.geo-map a:hover .geo-map-point,
+.geo-map a:focus .geo-map-point {
+    fill: rgba(20, 72, 207, 0.82);
+    transform: scale(1.08);
+}
+
+.geo-map-label {
+    font-size: 2.2px;
+    font-weight: 700;
+    fill: #173f5f;
+    text-anchor: middle;
+    paint-order: stroke;
+    stroke: rgba(255, 255, 255, 0.92);
+    stroke-width: 0.65;
+    pointer-events: none;
+}
+
+.geo-city-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.geo-city-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #d8e7f0;
+    border-radius: 12px;
+    background: var(--surface-soft);
+    color: var(--ink);
+    text-decoration: none;
+}
+
+.geo-city-row:hover,
+.geo-city-row:focus {
+    color: var(--accent-strong);
+    border-color: #a8c8dd;
+    background: #ffffff;
+}
+
+.empty-state {
+    padding: 1.2rem;
+    border: 1px dashed #c8d9e4;
+    border-radius: 12px;
+    color: var(--muted);
+    background: var(--surface-soft);
+}
+
 .filter-panel .card-body {
     padding: 1.15rem;
 }
