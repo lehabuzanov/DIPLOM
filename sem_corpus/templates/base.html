@@ -248,6 +248,10 @@
                         button.addEventListener("mousedown", function (event) {
                             event.preventDefault();
                             input.value = item;
+                            input.dispatchEvent(new CustomEvent("suggest:selected", {
+                                bubbles: true,
+                                detail: { value: item }
+                            }));
                             closeList();
                         });
                         list.appendChild(button);
@@ -257,6 +261,9 @@
                 async function loadItems() {
                     const url = new URL(input.dataset.suggestUrl, window.location.origin);
                     url.searchParams.set("q", input.value.trim());
+                    if (input.dataset.suggestLimit) {
+                        url.searchParams.set("limit", input.dataset.suggestLimit);
+                    }
                     try {
                         const response = await fetch(url.toString(), {
                             headers: { "X-Requested-With": "XMLHttpRequest" },
@@ -271,7 +278,7 @@
                 }
 
                 input.placeholder = input.dataset.suggestPlaceholder || input.placeholder;
-                input.autocomplete = "off";
+                input.autocomplete = input.dataset.browserAutocomplete || "off";
                 input.addEventListener("focus", loadItems);
                 input.addEventListener("input", function () {
                     window.clearTimeout(debounceTimer);

@@ -15,7 +15,7 @@
     <a class="btn btn-outline-secondary" href="{% url 'analytics:dashboard' %}">Аналитика</a>
 </div>
 
-<form class="card surface-card mb-4" method="get">
+<form class="card surface-card mb-4 geo-filter-form" method="get" id="geoFilterForm" data-url="{% url 'corpus:geography-data' %}">
     <div class="card-body p-4">
         <div class="row g-3 align-items-end">
             <div class="col-md-4 col-xl-3">
@@ -32,17 +32,21 @@
                 <input
                     class="form-control js-suggest-input"
                     id="geo-city"
-                    name="city"
+                    name="city_display"
                     value="{% if selected_city %}{{ selected_city.display_name }}{% endif %}"
                     placeholder="Выберите или введите город"
                     data-suggest-url="{% url 'corpus:suggest' 'cities' %}"
+                    data-suggest-limit="400"
                     data-suggest-placeholder="Выберите или введите город"
+                    data-browser-autocomplete="new-password"
+                    autocomplete="new-password"
                 >
+                <input type="hidden" id="geo-city-value" name="city" value="{% if selected_city %}{{ selected_city.display_name }}{% endif %}">
             </div>
             <div class="col-md-3 col-xl-5">
                 <div class="d-flex flex-wrap gap-2">
                     <button class="btn btn-primary" type="submit">Показать</button>
-                    <a class="btn btn-outline-secondary" href="{% url 'corpus:geography' %}">Сбросить</a>
+                    <button class="btn btn-outline-secondary" type="button" id="geoResetButton">Сбросить</button>
                 </div>
             </div>
         </div>
@@ -50,22 +54,28 @@
 </form>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="stat-card">
             <div class="stat-label">Городов</div>
-            <div class="stat-value">{{ city_total }}</div>
+            <div class="stat-value" id="geoCityTotal">{{ city_total }}</div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
+        <div class="stat-card">
+            <div class="stat-label">Стран</div>
+            <div class="stat-value" id="geoCountryTotal">{{ country_total }}</div>
+        </div>
+    </div>
+    <div class="col-md-3">
         <div class="stat-card">
             <div class="stat-label">Авторов</div>
-            <div class="stat-value">{{ author_total }}</div>
+            <div class="stat-value" id="geoAuthorTotal">{{ author_total }}</div>
         </div>
     </div>
-    <div class="col-md-4">
+    <div class="col-md-3">
         <div class="stat-card">
             <div class="stat-label">Статей</div>
-            <div class="stat-value">{{ article_total }}</div>
+            <div class="stat-value" id="geoArticleTotal">{{ article_total }}</div>
         </div>
     </div>
 </div>
@@ -77,7 +87,7 @@
                 <div class="d-flex flex-column flex-lg-row justify-content-between gap-2 mb-3">
                     <div>
                         <h2 class="h4 mb-1">Карта публикационной географии</h2>
-                        <div class="text-secondary small">
+                        <div class="text-secondary small" id="geoScopeLabel">
                             {% if selected_city %}
                                 {{ selected_city.display_name }}{% if selected_year %}, {{ selected_year }}{% endif %}
                             {% else %}
@@ -86,26 +96,38 @@
                         </div>
                     </div>
                     {% if top_city %}
-                        <div class="text-lg-end small">
+                        <div class="text-lg-end small" id="geoLeaderBlock">
                             <span class="text-secondary">Лидер:</span>
-                            <span class="fw-semibold">{{ top_city.display_name }}</span>
+                            <span class="fw-semibold" id="geoLeaderName">{{ top_city.display_name }}</span>
+                        </div>
+                    {% else %}
+                        <div class="text-lg-end small d-none" id="geoLeaderBlock">
+                            <span class="text-secondary">Лидер:</span>
+                            <span class="fw-semibold" id="geoLeaderName"></span>
                         </div>
                     {% endif %}
                 </div>
 
-                {% if map_points %}
-                    <div class="geo-map-shell position-relative">
+                <div class="geo-map-shell position-relative {% if not map_points %}d-none{% endif %}" id="geoMapShell">
                         <div id="geoLeafletMap" class="geo-leaflet-map" role="img" aria-label="Интерактивная карта городов авторов"></div>
-                        <div class="geo-map-legend">
-                            <span class="geo-legend-dot"></span>
-                            Размер точки отражает число авторов
+                        <div class="geo-map-loading d-none" id="geoMapLoading">
+                            <span class="geo-loader"></span>
+                            Обновляем карту
                         </div>
-                    </div>
-                {% else %}
-                    <div class="empty-state">
+                        <div class="geo-map-legend">
+                            <span class="geo-legend-title">Статей:</span>
+                            {% for row in activity_rows %}
+                                <span class="geo-legend-item"><span class="geo-legend-dot geo-dot-{{ row.level }}"></span>{{ row.label }}</span>
+                            {% endfor %}
+                            <span class="geo-legend-item"><span class="geo-legend-diamond"></span>другая страна</span>
+                        </div>
+                        <div class="geo-map-attribution">
+                            Основа карты: OpenStreetMap
+                        </div>
+                </div>
+                <div class="empty-state {% if map_points %}d-none{% endif %}" id="geoEmptyState">
                         Для выбранных параметров пока нет географических данных.
-                    </div>
-                {% endif %}
+                </div>
             </div>
         </section>
     </div>
@@ -113,24 +135,26 @@
     <div class="col-xl-4">
         <section class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">{% if selected_year %}Лидеры года{% else %}Лидеры за все время{% endif %}</h2>
+                <h2 class="h4 mb-3" id="geoLeadersTitle">{% if selected_year %}Лидеры года{% else %}Лидеры за все время{% endif %}</h2>
                 {% if city_rows %}
-                    <div class="geo-city-list">
-                        {% for row in city_rows|slice:":8" %}
-                            <a class="geo-city-row" href="{% url 'corpus:geography' %}?year={{ selected_year }}&city={{ row.display_name|urlencode }}">
+                    <div class="geo-city-list" id="geoCityList">
+                        {% for row in city_rows %}
+                            <a class="geo-city-row" href="{% url 'corpus:geography' %}?year={{ selected_year }}&city={{ row.display_name|urlencode }}" data-city="{{ row.display_name }}">
                                 <span>
                                     <span class="fw-semibold">{{ row.display_name }}</span>
                                     <span class="d-block small text-secondary">{{ row.country }}{% if row.region %}, {{ row.region }}{% endif %}</span>
                                 </span>
                                 <span class="text-end">
-                                    <span class="fw-semibold">{{ row.author_count }}</span>
-                                    <span class="d-block small text-secondary">авт.</span>
+                                    <span class="fw-semibold">{{ row.article_count }}</span>
+                                    <span class="d-block small text-secondary">ст.</span>
                                 </span>
                             </a>
                         {% endfor %}
                     </div>
+                    <p class="text-secondary mb-0 d-none" id="geoCityListEmpty">Нет городов для выбранных параметров.</p>
                 {% else %}
-                    <p class="text-secondary mb-0">Нет городов для выбранного года.</p>
+                    <div class="geo-city-list" id="geoCityList"></div>
+                    <p class="text-secondary mb-0" id="geoCityListEmpty">Нет городов для выбранных параметров.</p>
                 {% endif %}
             </div>
         </section>
@@ -141,39 +165,93 @@
     <div class="col-lg-7">
         <section class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">Города по активности</h2>
-                {% if city_rows %}
-                    <canvas id="geoTopCitiesChart" height="170"></canvas>
-                {% else %}
-                    <p class="text-secondary mb-0">Недостаточно данных для диаграммы.</p>
-                {% endif %}
+                <h2 class="h4 mb-3" id="geoCountryTitle">{% if selected_city %}Выбранный город{% else %}Страны в выборке{% endif %}</h2>
+                <div id="geoCountryPanel">
+                    {% if selected_city and city_rows %}
+                        {% for row in city_rows %}
+                            <div class="geo-selected-city-card">
+                                <div>
+                                    <div class="text-secondary small mb-1">{{ row.country }}{% if row.region %}, {{ row.region }}{% endif %}</div>
+                                    <div class="h5 mb-0">{{ row.display_name }}</div>
+                                </div>
+                                <div class="geo-selected-city-stats">
+                                    <span><strong>{{ row.article_count }}</strong> статей</span>
+                                    <span><strong>{{ row.author_count }}</strong> авторов</span>
+                                    <span><strong>{{ row.affiliation_count }}</strong> организаций</span>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    {% elif selected_city and selected_city_payload %}
+                        <div class="geo-selected-city-card geo-selected-city-card-empty">
+                            <div>
+                                <div class="text-secondary small mb-1">{{ selected_city_payload.country }}{% if selected_city_payload.region %}, {{ selected_city_payload.region }}{% endif %}</div>
+                                <div class="h5 mb-2">{{ selected_city_payload.display_name }}</div>
+                                <p class="text-secondary mb-0">
+                                    {% if selected_year %}В {{ selected_year }} году публикаций для города не найдено.{% else %}Публикаций для города не найдено.{% endif %}
+                                    {% if selected_city_payload.available_years %} Данные есть за годы: {{ selected_city_payload.available_years|join:", " }}.{% endif %}
+                                </p>
+                            </div>
+                            <div class="geo-selected-city-stats">
+                                <span><strong>0</strong> статей</span>
+                                <span><strong>0</strong> авторов</span>
+                                <span><strong>0</strong> организаций</span>
+                            </div>
+                        </div>
+                    {% elif country_rows %}
+                            <div class="geo-country-bars" id="geoCountryList">
+                                {% for row in country_rows %}
+                                    <div class="geo-country-bar-row">
+                                        <div class="geo-country-bar-head">
+                                            <span class="fw-semibold">{{ row.country }}</span>
+                                            <span>
+                                                {{ row.article_count }} статей ({% widthratio row.article_count article_total 100 %}%)
+                                                <span class="geo-country-extra">, {{ row.author_count }} авторов, {{ row.city_count }} городов</span>
+                                            </span>
+                                        </div>
+                                        <div class="geo-country-bar-track">
+                                            <span class="geo-country-bar-fill" style="width: {% widthratio row.article_count article_total 100 %}%"></span>
+                                        </div>
+                                    </div>
+                                {% endfor %}
+                            </div>
+                            <p class="text-secondary small mt-3 mb-0" id="geoCountryHint">Полосы показывают вклад страны по числу статей; рядом сохранены точные значения.</p>
+                    {% else %}
+                        <p class="text-secondary mb-0">Недостаточно данных для сводки.</p>
+                    {% endif %}
+                </div>
             </div>
         </section>
     </div>
     <div class="col-lg-5">
         <section class="card surface-card h-100">
             <div class="card-body p-4">
-                <h2 class="h4 mb-3">
-                    {% if selected_city %}Динамика города{% else %}Как читать карту{% endif %}
+                <h2 class="h4 mb-3" id="geoTimelineTitle">
+                    {% if selected_city and selected_year %}Показатели города за {{ selected_year }} год{% elif selected_city %}Динамика города{% else %}Как читать карту{% endif %}
                 </h2>
-                {% if selected_city and timeline_rows %}
+                {% if selected_city and selected_year and not article_rows %}
+                    <canvas id="geoTimelineChart" class="d-none" height="190"></canvas>
+                    <div class="geo-activity-summary" id="geoMapHelpText">
+                        <div class="geo-empty-note">
+                            В {{ selected_year }} году для города {{ selected_city.display_name }} публикаций не найдено.
+                            {% if selected_city_payload.available_years %}Публикации города есть за годы: {{ selected_city_payload.available_years|join:", " }}.{% endif %}
+                        </div>
+                    </div>
+                {% elif selected_city and timeline_rows %}
                     <canvas id="geoTimelineChart" height="190"></canvas>
+                    <div class="geo-activity-summary d-none" id="geoMapHelpText"></div>
                 {% else %}
-                    <p class="text-secondary mb-0">
-                        Размер точки связан с числом авторов. В списке лидеров можно открыть город и посмотреть статьи, связанные с ним.
-                    </p>
+                    <canvas id="geoTimelineChart" class="d-none" height="190"></canvas>
+                    <div class="geo-activity-summary" id="geoMapHelpText"></div>
                 {% endif %}
             </div>
         </section>
     </div>
 </div>
 
-{% if selected_city %}
-    <section class="card surface-card mt-4">
+    <section class="card surface-card mt-4 {% if not selected_city %}d-none{% endif %}" id="geoArticleSection">
         <div class="card-body p-4">
-            <h2 class="h4 mb-3">Статьи города {{ selected_city.display_name }}</h2>
-            {% if article_rows %}
-                <div class="table-responsive">
+            <h2 class="h4 mb-3" id="geoArticleTitle">Статьи города {% if selected_city %}{{ selected_city.display_name }}{% endif %}</h2>
+                <div class="table-responsive {% if not article_rows %}d-none{% endif %}" id="geoArticleTable">
                     <table class="table align-middle">
                         <thead>
                             <tr>
@@ -182,7 +260,7 @@
                                 <th class="text-end">Авторов из города</th>
                             </tr>
                         </thead>
-                        <tbody>
+                        <tbody id="geoArticleRows">
                             {% for row in article_rows %}
                                 <tr>
                                     <td><a href="{% url 'corpus:article-detail' row.article__slug %}">{{ row.article__title }}</a></td>
@@ -193,22 +271,55 @@
                         </tbody>
                     </table>
                 </div>
-            {% else %}
-                <p class="text-secondary mb-0">В выбранном году статей для этого города не найдено.</p>
-            {% endif %}
+                <p class="text-secondary mb-0 {% if article_rows %}d-none{% endif %}" id="geoArticleEmpty">Для этого города статей по выбранным параметрам не найдено.</p>
         </div>
     </section>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
     (function () {
-        const mapPoints = {{ map_payload|safe }};
-        const topPayload = {{ chart_payload|safe }};
-        const timelinePayload = {{ timeline_payload|safe }};
-        const selectedYear = "{{ selected_year|escapejs }}";
+        let mapPoints = {{ map_payload|safe }};
+        let cityRowsPayload = {{ city_payload|safe }};
+        let countryRowsPayload = {{ country_payload|safe }};
+        let activityRowsPayload = {{ activity_payload|safe }};
+        let selectedCityDetails = {{ selected_city_payload_json|safe }};
+        let timelinePayload = {{ timeline_payload|safe }};
+        let selectedYear = "{{ selected_year|escapejs }}";
+        let selectedCity = {% if selected_city %}"{{ selected_city.display_name|escapejs }}"{% else %}""{% endif %};
+        let currentArticleTotal = {{ article_total|default:0 }};
+        let map = null;
+        let markerLayer = null;
+        let timelineChart = null;
+
+        const form = document.getElementById("geoFilterForm");
+        const yearInput = document.getElementById("geo-year");
+        const cityInput = document.getElementById("geo-city");
+        const cityValueInput = document.getElementById("geo-city-value");
+        const resetButton = document.getElementById("geoResetButton");
+        const mapElement = document.getElementById("geoLeafletMap");
+        const mapShell = document.getElementById("geoMapShell");
+        const emptyState = document.getElementById("geoEmptyState");
+        const loading = document.getElementById("geoMapLoading");
+        const cityTotal = document.getElementById("geoCityTotal");
+        const countryTotal = document.getElementById("geoCountryTotal");
+        const authorTotal = document.getElementById("geoAuthorTotal");
+        const articleTotal = document.getElementById("geoArticleTotal");
+        const scopeLabel = document.getElementById("geoScopeLabel");
+        const leaderBlock = document.getElementById("geoLeaderBlock");
+        const leaderName = document.getElementById("geoLeaderName");
+        const leadersTitle = document.getElementById("geoLeadersTitle");
+        const cityList = document.getElementById("geoCityList");
+        const countryTitle = document.getElementById("geoCountryTitle");
+        const countryPanel = document.getElementById("geoCountryPanel");
+        const timelineTitle = document.getElementById("geoTimelineTitle");
+        const helpText = document.getElementById("geoMapHelpText");
+        const articleSection = document.getElementById("geoArticleSection");
+        const articleTitle = document.getElementById("geoArticleTitle");
+        const articleTable = document.getElementById("geoArticleTable");
+        const articleRows = document.getElementById("geoArticleRows");
+        const articleEmpty = document.getElementById("geoArticleEmpty");
 
         function escapeHtml(value) {
             return String(value || "").replace(/[&<>"']/g, function (char) {
@@ -222,100 +333,440 @@
             });
         }
 
-        const mapElement = document.getElementById("geoLeafletMap");
-        if (mapElement && mapPoints.length) {
-            if (window.L) {
-                const map = L.map(mapElement, {
-                    scrollWheelZoom: true,
-                    zoomControl: true
-                });
-                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                    maxZoom: 18,
-                    attribution: "&copy; OpenStreetMap"
-                }).addTo(map);
+        function buildScopeLabel() {
+            if (selectedCity) {
+                return selectedCity + (selectedYear ? ", " + selectedYear : ", все годы");
+            }
+            return selectedYear ? selectedYear + " год" : "Все годы";
+        }
 
-                const bounds = [];
-                mapPoints.forEach(function (point) {
-                    const latLng = [point.latitude, point.longitude];
-                    bounds.push(latLng);
-                    const url = new URL("{% url 'corpus:geography' %}", window.location.origin);
-                    if (selectedYear) {
-                        url.searchParams.set("year", selectedYear);
-                    }
-                    url.searchParams.set("city", point.display_name);
-
-                    const marker = L.circleMarker(latLng, {
-                        radius: point.radius,
-                        color: "#ffffff",
-                        weight: 2,
-                        fillColor: "#1f66ff",
-                        fillOpacity: 0.68
-                    }).addTo(map);
-                    const locationLine = [point.country, point.region].filter(Boolean).join(", ");
-                    marker.bindTooltip(point.display_name, {
-                        direction: "top",
-                        sticky: true,
-                        opacity: 0.96
-                    });
-                    marker.bindPopup(
-                        '<div class="geo-popup">' +
-                            '<div class="fw-semibold mb-1">' + escapeHtml(point.display_name) + '</div>' +
-                            '<div class="small text-secondary mb-2">' + escapeHtml(locationLine) + '</div>' +
-                            '<div class="small">Авторов: <strong>' + point.author_count + '</strong></div>' +
-                            '<div class="small">Статей: <strong>' + point.article_count + '</strong></div>' +
-                            '<div class="small mb-2">Организаций: <strong>' + point.affiliation_count + '</strong></div>' +
-                            '<a class="btn btn-sm btn-primary" href="' + url.toString() + '">Открыть город</a>' +
-                        '</div>'
-                    );
-                });
-
-                if (bounds.length === 1) {
-                    map.setView(bounds[0], 6);
-                } else {
-                    map.fitBounds(bounds, { padding: [28, 28], maxZoom: 6 });
-                }
-            } else {
-                mapElement.innerHTML = '<div class="empty-state m-3">Не удалось загрузить интерактивную карту. Проверьте подключение к CDN Leaflet.</div>';
+        function setLoading(isLoading) {
+            if (loading) {
+                loading.classList.toggle("d-none", !isLoading);
+            }
+            if (mapShell) {
+                mapShell.classList.toggle("is-loading", isLoading);
             }
         }
 
-        const topCanvas = document.getElementById("geoTopCitiesChart");
-        if (topCanvas && topPayload.labels.length) {
-            new Chart(topCanvas, {
+        function markerSvg(point) {
+            const color = escapeHtml(point.color || "#73808c");
+            const title = point.shape === "diamond" ? "Другая страна" : "Россия";
+            const geometry = point.shape === "diamond"
+                ? '<polygon points="12,2 22,12 12,22 2,12" fill="' + color + '" stroke="#ffffff" stroke-width="3" />'
+                : '<circle cx="12" cy="12" r="9" fill="' + color + '" stroke="#ffffff" stroke-width="3" />';
+            return '<svg class="geo-marker-svg geo-marker-svg-' + escapeHtml(point.shape || "circle") + '" width="24" height="24" viewBox="0 0 24 24" role="img" aria-label="' + title + '">' +
+                geometry +
+                '</svg>';
+        }
+
+        function initMap() {
+            if (!mapElement || !window.L) {
+                return;
+            }
+            if (map) {
+                return;
+            }
+            map = L.map(mapElement, {
+                attributionControl: false,
+                scrollWheelZoom: true,
+                zoomControl: true
+            });
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                maxZoom: 18,
+                attribution: ""
+            }).addTo(map);
+            markerLayer = L.layerGroup().addTo(map);
+        }
+
+        function renderMap(points) {
+            if (!mapElement || !window.L) {
+                if (mapElement) {
+                    mapElement.innerHTML = '<div class="empty-state m-3">Не удалось загрузить интерактивную карту. Проверьте подключение к CDN Leaflet.</div>';
+                }
+                return;
+            }
+            initMap();
+            markerLayer.clearLayers();
+            mapShell.classList.toggle("d-none", !points.length);
+            emptyState.classList.toggle("d-none", Boolean(points.length));
+            if (!points.length) {
+                return;
+            }
+
+            const bounds = [];
+            points.forEach(function (point) {
+                const latLng = [point.latitude, point.longitude];
+                bounds.push(latLng);
+                const markerHtml = markerSvg(point);
+                const marker = L.marker(latLng, {
+                    icon: L.divIcon({
+                        className: "geo-marker-icon",
+                        html: markerHtml,
+                        iconSize: [24, 24],
+                        iconAnchor: [12, 12],
+                        popupAnchor: [0, -10],
+                        tooltipAnchor: [0, -12]
+                    })
+                }).addTo(markerLayer);
+                const locationLine = [point.country, point.region].filter(Boolean).join(", ");
+                marker.bindTooltip(point.display_name, {
+                    direction: "top",
+                    sticky: true,
+                    opacity: 0.96
+                });
+                const emptyNotice = point.is_empty
+                    ? '<div class="small text-secondary mb-2">Для выбранного года публикаций нет.</div>'
+                    : '';
+                marker.bindPopup(
+                    '<div class="geo-popup">' +
+                        '<div class="fw-semibold mb-1">' + escapeHtml(point.display_name) + '</div>' +
+                        '<div class="small text-secondary mb-2">' + escapeHtml(locationLine) + '</div>' +
+                        emptyNotice +
+                        '<div class="small">Статей: <strong>' + point.article_count + '</strong></div>' +
+                        '<div class="small">Авторов: <strong>' + point.author_count + '</strong></div>' +
+                        '<div class="small">Уровень: <strong>' + escapeHtml(point.label) + '</strong></div>' +
+                        '<div class="small mb-2">Организаций: <strong>' + point.affiliation_count + '</strong></div>' +
+                        '<button class="btn btn-sm btn-primary" type="button" data-map-city="' + escapeHtml(point.display_name) + '">Открыть город</button>' +
+                    '</div>'
+                );
+            });
+
+            if (bounds.length === 1) {
+                map.setView(bounds[0], 6);
+            } else {
+                map.fitBounds(bounds, { padding: [34, 34], maxZoom: 6 });
+            }
+            window.setTimeout(function () {
+                map.invalidateSize();
+            }, 80);
+        }
+
+        function renderTimeline(payload) {
+            const timelineCanvas = document.getElementById("geoTimelineChart");
+            if (!timelineCanvas) {
+                return;
+            }
+            if (timelineChart) {
+                timelineChart.destroy();
+                timelineChart = null;
+            }
+            let chartPayload = payload;
+            if (selectedYear && selectedCity) {
+                const selectedIndex = payload.labels.indexOf(selectedYear);
+                if (selectedIndex >= 0) {
+                    chartPayload = {
+                        labels: [payload.labels[selectedIndex]],
+                        articles: [payload.articles[selectedIndex]],
+                        authors: [payload.authors[selectedIndex]]
+                    };
+                } else {
+                    chartPayload = { labels: [], articles: [], authors: [] };
+                }
+            }
+            const hasTimeline = selectedCity && chartPayload.labels.length;
+            timelineCanvas.classList.toggle("d-none", !hasTimeline);
+            helpText.classList.toggle("d-none", Boolean(hasTimeline));
+            timelineTitle.textContent = selectedCity
+                ? (selectedYear ? "Показатели города за " + selectedYear + " год" : "Динамика города")
+                : "Как читать карту";
+            if (!hasTimeline) {
+                if (selectedCity && selectedYear) {
+                    const years = selectedCityDetails && selectedCityDetails.available_years && selectedCityDetails.available_years.length
+                        ? " Публикации города есть за годы: " + selectedCityDetails.available_years.join(", ") + "."
+                        : "";
+                    helpText.innerHTML = '<div class="geo-empty-note">В ' + escapeHtml(selectedYear) + ' году для города ' + escapeHtml(selectedCity) + ' публикаций не найдено.' + escapeHtml(years) + '</div>';
+                }
+                return;
+            }
+            timelineChart = new Chart(timelineCanvas, {
                 type: "bar",
                 data: {
-                    labels: topPayload.labels,
+                    labels: chartPayload.labels,
                     datasets: [
-                        { label: "Авторы", data: topPayload.authors, backgroundColor: "rgba(31, 102, 255, 0.72)" },
-                        { label: "Статьи", data: topPayload.articles, backgroundColor: "rgba(89, 154, 190, 0.52)" }
+                        { label: "Статьи", data: chartPayload.articles, backgroundColor: "#1f66ff", borderColor: "#1f66ff", borderWidth: 1 },
+                        { label: "Авторы", data: chartPayload.authors, backgroundColor: "#4d7f9f", borderColor: "#4d7f9f", borderWidth: 1 }
                     ]
                 },
                 options: {
                     responsive: true,
-                    plugins: { legend: { position: "bottom" } },
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+                    plugins: {
+                        legend: {
+                            position: "bottom",
+                            labels: { usePointStyle: true, boxWidth: 9, boxHeight: 9 }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    return context.dataset.label + ": " + context.parsed.y;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false } },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, stepSize: 1 },
+                            suggestedMax: Math.max.apply(null, chartPayload.articles.concat(chartPayload.authors)) + 1
+                        }
+                    }
                 }
             });
         }
 
-        const timelineCanvas = document.getElementById("geoTimelineChart");
-        if (timelineCanvas && timelinePayload.labels.length) {
-            new Chart(timelineCanvas, {
-                type: "line",
-                data: {
-                    labels: timelinePayload.labels,
-                    datasets: [
-                        { label: "Статьи", data: timelinePayload.articles, borderColor: "#1f66ff", backgroundColor: "rgba(31, 102, 255, 0.12)", tension: 0.25, fill: true },
-                        { label: "Авторы", data: timelinePayload.authors, borderColor: "#4d7f9f", backgroundColor: "rgba(77, 127, 159, 0.12)", tension: 0.25 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    plugins: { legend: { position: "bottom" } },
-                    scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
-                }
+        function renderCityList(rows) {
+            cityList.innerHTML = "";
+            const emptyNode = document.getElementById("geoCityListEmpty");
+            if (emptyNode) {
+                emptyNode.classList.toggle("d-none", Boolean(rows.length));
+            }
+            rows.forEach(function (row) {
+                const link = document.createElement("a");
+                link.className = "geo-city-row";
+                link.href = "#";
+                link.dataset.city = row.display_name;
+                link.innerHTML =
+                    '<span>' +
+                        '<span class="fw-semibold">' + escapeHtml(row.display_name) + '</span>' +
+                        '<span class="d-block small text-secondary">' + escapeHtml([row.country, row.region].filter(Boolean).join(", ")) + '</span>' +
+                    '</span>' +
+                    '<span class="text-end">' +
+                        '<span class="fw-semibold">' + row.article_count + '</span>' +
+                        '<span class="d-block small text-secondary">ст.</span>' +
+                    '</span>';
+                cityList.appendChild(link);
             });
         }
+
+        function renderCountryPanel(countryRows, cityRows, cityDetails) {
+            if (!countryPanel) {
+                return;
+            }
+            countryPanel.innerHTML = "";
+            countryTitle.textContent = selectedCity ? "Выбранный город" : "Страны в выборке";
+
+            if (selectedCity && cityRows.length) {
+                const row = cityRows[0];
+                countryPanel.innerHTML =
+                    '<div class="geo-selected-city-card">' +
+                        '<div>' +
+                            '<div class="text-secondary small mb-1">' + escapeHtml([row.country, row.region].filter(Boolean).join(", ")) + '</div>' +
+                            '<div class="h5 mb-0">' + escapeHtml(row.display_name) + '</div>' +
+                        '</div>' +
+                        '<div class="geo-selected-city-stats">' +
+                            '<span><strong>' + row.article_count + '</strong> статей</span>' +
+                            '<span><strong>' + row.author_count + '</strong> авторов</span>' +
+                            '<span><strong>' + row.affiliation_count + '</strong> организаций</span>' +
+                        '</div>' +
+                    '</div>';
+                return;
+            }
+
+            if (selectedCity && cityDetails) {
+                const years = cityDetails.available_years && cityDetails.available_years.length
+                    ? " Данные есть за годы: " + cityDetails.available_years.join(", ") + "."
+                    : "";
+                countryPanel.innerHTML =
+                    '<div class="geo-selected-city-card geo-selected-city-card-empty">' +
+                        '<div>' +
+                            '<div class="text-secondary small mb-1">' + escapeHtml([cityDetails.country, cityDetails.region].filter(Boolean).join(", ")) + '</div>' +
+                            '<div class="h5 mb-2">' + escapeHtml(cityDetails.display_name) + '</div>' +
+                            '<p class="text-secondary mb-0">' + (selectedYear ? "В " + selectedYear + " году публикаций для города не найдено." : "Публикаций для города не найдено.") + years + '</p>' +
+                        '</div>' +
+                        '<div class="geo-selected-city-stats">' +
+                            '<span><strong>0</strong> статей</span>' +
+                            '<span><strong>0</strong> авторов</span>' +
+                            '<span><strong>0</strong> организаций</span>' +
+                        '</div>' +
+                    '</div>';
+                return;
+            }
+
+            if (!countryRows.length) {
+                countryPanel.innerHTML = '<p class="text-secondary mb-0">Нет стран для выбранных параметров.</p>';
+                return;
+            }
+
+            const maxArticles = Math.max.apply(null, countryRows.map(function (row) {
+                return row.article_count;
+            }));
+            const totalArticles = countryRows.reduce(function (sum, row) {
+                return sum + row.article_count;
+            }, 0);
+            const list = document.createElement("div");
+            list.className = "geo-country-bars";
+            countryRows.forEach(function (row) {
+                const visualWidth = maxArticles ? Math.max(7, Math.sqrt(row.article_count / maxArticles) * 100) : 0;
+                const share = totalArticles ? (row.article_count / totalArticles * 100).toFixed(row.article_count === totalArticles ? 0 : 1) : "0";
+                const div = document.createElement("div");
+                div.className = "geo-country-bar-row";
+                div.innerHTML =
+                    '<div class="geo-country-bar-head">' +
+                        '<span class="fw-semibold">' + escapeHtml(row.country) + '</span>' +
+                        '<span>' + row.article_count + ' статей (' + share + '%)<span class="geo-country-extra">, ' + row.author_count + ' авторов, ' + row.city_count + ' городов</span></span>' +
+                    '</div>' +
+                    '<div class="geo-country-bar-track">' +
+                        '<span class="geo-country-bar-fill" style="width:' + visualWidth.toFixed(1) + '%"></span>' +
+                    '</div>';
+                list.appendChild(div);
+            });
+            countryPanel.appendChild(list);
+            const hint = document.createElement("p");
+            hint.className = "text-secondary small mt-3 mb-0";
+            hint.textContent = "Полосы используют мягкий масштаб, чтобы малые страны были видны; точные значения указаны справа.";
+            countryPanel.appendChild(hint);
+        }
+
+        function renderActivitySummary(rows) {
+            if (!helpText) {
+                return;
+            }
+            helpText.innerHTML = "";
+            rows.forEach(function (row) {
+                if (!row.city_count) {
+                    return;
+                }
+                const item = document.createElement("div");
+                item.className = "geo-activity-row";
+                item.innerHTML =
+                    '<span class="geo-activity-label"><span class="geo-legend-dot" style="background:' + row.color + '"></span>' + escapeHtml(row.label) + '</span>' +
+                    '<span class="geo-activity-metrics">' +
+                        '<span><strong>' + row.city_count + '</strong> городов</span>' +
+                        '<span><strong>' + row.article_count + '</strong> статей</span>' +
+                    '</span>';
+                helpText.appendChild(item);
+            });
+            if (!helpText.innerHTML) {
+                helpText.textContent = "Для выбранных параметров нет городов.";
+            }
+        }
+
+        function renderArticles(rows) {
+            articleSection.classList.toggle("d-none", !selectedCity);
+            articleTitle.textContent = selectedCity ? "Статьи города " + selectedCity : "Статьи города";
+            articleRows.innerHTML = "";
+            articleTable.classList.toggle("d-none", !rows.length);
+            articleEmpty.classList.toggle("d-none", Boolean(rows.length));
+            rows.forEach(function (row) {
+                const tr = document.createElement("tr");
+                const articleUrl = "{% url 'corpus:article-detail' 'ARTICLE_SLUG' %}".replace("ARTICLE_SLUG", encodeURIComponent(row.article__slug));
+                tr.innerHTML =
+                    '<td><a href="' + articleUrl + '">' + escapeHtml(row.article__title) + '</a></td>' +
+                    '<td>' + row.article__issue__year + ', т. ' + escapeHtml(row.article__issue__volume) + ', № ' + escapeHtml(row.article__issue__number) + '</td>' +
+                    '<td class="text-end">' + row.author_count + '</td>';
+                articleRows.appendChild(tr);
+            });
+        }
+
+        function renderPayload(payload) {
+            selectedYear = payload.selected_year || "";
+            selectedCity = payload.selected_city ? payload.selected_city.display_name : "";
+            selectedCityDetails = payload.selected_city || null;
+            yearInput.value = selectedYear;
+            cityInput.value = selectedCity;
+            cityValueInput.value = selectedCity;
+            cityTotal.textContent = payload.city_total;
+            countryTotal.textContent = payload.country_total;
+            authorTotal.textContent = payload.author_total;
+            articleTotal.textContent = payload.article_total;
+            currentArticleTotal = payload.article_total;
+            scopeLabel.textContent = buildScopeLabel();
+            leadersTitle.textContent = selectedYear ? "Лидеры года" : "Лидеры за все время";
+            leaderBlock.classList.toggle("d-none", !payload.top_city);
+            leaderName.textContent = payload.top_city ? payload.top_city.display_name : "";
+            renderMap(payload.map_points);
+            renderCityList(payload.city_rows);
+            renderCountryPanel(payload.country_rows, payload.city_rows, selectedCityDetails);
+            renderActivitySummary(payload.activity_rows);
+            renderTimeline(payload.timeline);
+            renderArticles(payload.article_rows);
+        }
+
+        function buildDataUrl() {
+            const url = new URL(form.dataset.url, window.location.origin);
+            if (yearInput.value) {
+                url.searchParams.set("year", yearInput.value);
+            }
+            if (cityValueInput.value) {
+                url.searchParams.set("city", cityValueInput.value);
+            }
+            return url;
+        }
+
+        async function loadData(pushUrl) {
+            setLoading(true);
+            try {
+                const dataUrl = buildDataUrl();
+                const response = await fetch(dataUrl.toString(), {
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                const payload = await response.json();
+                renderPayload(payload);
+                if (pushUrl) {
+                    const pageUrl = new URL("{% url 'corpus:geography' %}", window.location.origin);
+                    if (payload.selected_year) {
+                        pageUrl.searchParams.set("year", payload.selected_year);
+                    }
+                    if (payload.selected_city) {
+                        pageUrl.searchParams.set("city", payload.selected_city.display_name);
+                    }
+                    window.history.pushState({}, "", pageUrl.toString());
+                }
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        form.addEventListener("submit", function (event) {
+            event.preventDefault();
+            cityValueInput.value = cityInput.value.trim();
+            loadData(true);
+        });
+        yearInput.addEventListener("change", function () {
+            cityValueInput.value = cityInput.value.trim();
+            loadData(true);
+        });
+        cityInput.addEventListener("suggest:selected", function (event) {
+            cityValueInput.value = event.detail.value;
+            loadData(true);
+        });
+        cityInput.addEventListener("input", function () {
+            if (!cityInput.value.trim()) {
+                cityValueInput.value = "";
+                loadData(true);
+            }
+        });
+        resetButton.addEventListener("click", function () {
+            yearInput.value = "";
+            cityInput.value = "";
+            cityValueInput.value = "";
+            loadData(true);
+        });
+        cityList.addEventListener("click", function (event) {
+            const link = event.target.closest("[data-city]");
+            if (!link) {
+                return;
+            }
+            event.preventDefault();
+            cityValueInput.value = link.dataset.city;
+            cityInput.value = link.dataset.city;
+            loadData(true);
+        });
+        document.addEventListener("click", function (event) {
+            const button = event.target.closest("[data-map-city]");
+            if (!button) {
+                return;
+            }
+            cityValueInput.value = button.dataset.mapCity;
+            cityInput.value = button.dataset.mapCity;
+            loadData(true);
+        });
+
+        renderMap(mapPoints);
+        renderCountryPanel(countryRowsPayload, cityRowsPayload, selectedCityDetails);
+        renderActivitySummary(activityRowsPayload);
+        renderTimeline(timelinePayload);
     }());
 </script>
 {% endblock %}

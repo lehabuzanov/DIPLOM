@@ -370,8 +370,27 @@ def resolve_city_filter(raw_value: str) -> CityLocation | None:
 class GeographyDashboardView(TemplateView):
     template_name = "corpus/geography.html"
 
-    def get_context_data(self, **kwargs):
-        context = super().get_context_data(**kwargs)
+    ACTIVITY_LEVELS = [
+        {"level": "single", "label": "1 статья", "color": "#2f9e67", "min": 1, "max": 1},
+        {"level": "low", "label": "2-4 статьи", "color": "#6aa84f", "min": 2, "max": 4},
+        {"level": "medium", "label": "5-9 статей", "color": "#d69e2e", "min": 5, "max": 9},
+        {"level": "high", "label": "10-24 статьи", "color": "#e36b2c", "min": 10, "max": 24},
+        {"level": "very-high", "label": "25-99 статей", "color": "#c43d4b", "min": 25, "max": 99},
+        {"level": "leader", "label": "100+ статей", "color": "#6f1d46", "min": 100, "max": None},
+    ]
+
+    @classmethod
+    def activity_style(cls, article_count: int) -> dict[str, str]:
+        for level in cls.ACTIVITY_LEVELS:
+            if article_count >= level["min"] and (level["max"] is None or article_count <= level["max"]):
+                return {"level": level["level"], "label": level["label"], "color": level["color"]}
+        return {"level": "single", "label": "1 статья", "color": "#2f9e67"}
+
+    @staticmethod
+    def marker_shape(country: str) -> str:
+        return "circle" if (country or "").strip().casefold() == "россия" else "diamond"
+
+    def build_data(self):
         year_values = list(
             ArticleAuthor.objects.filter(
                 article__is_published=True,
@@ -415,7 +434,7 @@ class GeographyDashboardView(TemplateView):
                 author_count=Count("author", distinct=True),
                 affiliation_count=Count("affiliation", distinct=True),
             )
-            .order_by("-author_count", "-article_count", "affiliation__city_location__display_name")
+            .order_by("-article_count", "-author_count", "affiliation__city_location__display_name")
         )
         rows = [
             {
@@ -423,15 +442,14 @@ class GeographyDashboardView(TemplateView):
                 "display_name": row["affiliation__city_location__display_name"],
                 "region": row["affiliation__city_location__region"],
                 "country": row["affiliation__city_location__country"],
-                "latitude": row["affiliation__city_location__latitude"],
-                "longitude": row["affiliation__city_location__longitude"],
+                "latitude": float(row["affiliation__city_location__latitude"]),
+                "longitude": float(row["affiliation__city_location__longitude"]),
                 "article_count": row["article_count"],
                 "author_count": row["author_count"],
                 "affiliation_count": row["affiliation_count"],
             }
             for row in city_rows
         ]
-        max_authors = max((row["author_count"] for row in rows), default=1)
         map_points = [
             {
                 "id": row["id"],
@@ -443,11 +461,44 @@ class GeographyDashboardView(TemplateView):
                 "article_count": row["article_count"],
                 "author_count": row["author_count"],
                 "affiliation_count": row["affiliation_count"],
-                "radius": round(7 + (row["author_count"] / max_authors) * 14, 2),
+                **self.activity_style(row["article_count"]),
+                "shape": self.marker_shape(row["country"]),
             }
             for row in rows
         ]
-        article_rows = (
+        country_rows = list(
+            base_queryset.values("affiliation__city_location__country")
+            .annotate(
+                city_count=Count("affiliation__city_location", distinct=True),
+                author_count=Count("author", distinct=True),
+                article_count=Count("article", distinct=True),
+            )
+            .order_by("-article_count", "-author_count", "affiliation__city_location__country")
+        )
+        country_rows = [
+            {
+                "country": row["affiliation__city_location__country"],
+                "city_count": row["city_count"],
+                "author_count": row["author_count"],
+                "article_count": row["article_count"],
+            }
+            for row in country_rows
+        ]
+        activity_rows = []
+        for level in self.ACTIVITY_LEVELS:
+            level_cities = [
+                row for row in rows if row["article_count"] >= level["min"] and (level["max"] is None or row["article_count"] <= level["max"])
+            ]
+            activity_rows.append(
+                {
+                    "level": level["level"],
+                    "label": level["label"],
+                    "color": level["color"],
+                    "city_count": len(level_cities),
+                    "article_count": sum(row["article_count"] for row in level_cities),
+                }
+            )
+        article_rows = list(
             base_queryset.values(
                 "article_id",
                 "article__title",
@@ -457,7 +508,7 @@ class GeographyDashboardView(TemplateView):
                 "article__issue__number",
             )
             .annotate(author_count=Count("author", distinct=True))
-            .order_by("-article__issue__year", "article__title")[:40]
+            .order_by("-article__issue__year", "article__title")
         )
         timeline_rows = list(
             ArticleAuthor.objects.filter(
@@ -469,39 +520,116 @@ class GeographyDashboardView(TemplateView):
             .order_by("article__issue__year")
         ) if selected_city else []
 
-        context.update(
+        selected_city_payload = None
+        if selected_city:
+            selected_city_queryset = ArticleAuthor.objects.filter(
+                article__is_published=True,
+                affiliation__city_location=selected_city,
+            )
+            selected_city_years = list(
+                selected_city_queryset.order_by("-article__issue__year")
+                .values_list("article__issue__year", flat=True)
+                .distinct()
+            )
+            selected_city_payload = {
+                "id": selected_city.pk,
+                "display_name": selected_city.display_name,
+                "region": selected_city.region,
+                "country": selected_city.country,
+                "latitude": float(selected_city.latitude),
+                "longitude": float(selected_city.longitude),
+                "available_years": selected_city_years,
+                "article_count": selected_city_queryset.values("article_id").distinct().count(),
+                "author_count": selected_city_queryset.values("author_id").distinct().count(),
+                "affiliation_count": selected_city_queryset.values("affiliation_id").distinct().count(),
+            }
+            if selected_year and not rows:
+                map_points.append(
+                    {
+                        "id": selected_city.pk,
+                        "display_name": selected_city.display_name,
+                        "region": selected_city.region,
+                        "country": selected_city.country,
+                        "latitude": float(selected_city.latitude),
+                        "longitude": float(selected_city.longitude),
+                        "article_count": 0,
+                        "author_count": 0,
+                        "affiliation_count": 0,
+                        "level": "no-data",
+                        "label": "нет статей в выбранном году",
+                        "color": "#73808c",
+                        "shape": self.marker_shape(selected_city.country),
+                        "is_empty": True,
+                    }
+                )
+        country_palette = ["#1f66ff", "#4d7f9f", "#2f9e67", "#d69e2e", "#e36b2c", "#c43d4b", "#6f1d46", "#73808c"]
+        chart_payload = {
+            "labels": [row["country"] for row in country_rows],
+            "cities": [row["city_count"] for row in country_rows],
+            "authors": [row["author_count"] for row in country_rows],
+            "articles": [row["article_count"] for row in country_rows],
+            "colors": [country_palette[index % len(country_palette)] for index, _row in enumerate(country_rows)],
+        }
+        timeline_payload = {
+            "labels": [str(row["article__issue__year"]) for row in timeline_rows],
+            "articles": [row["article_count"] for row in timeline_rows],
+            "authors": [row["author_count"] for row in timeline_rows],
+        }
+        return {
+            "year_values": year_values,
+            "selected_year": selected_year,
+            "selected_city": selected_city,
+            "selected_city_payload": selected_city_payload,
+            "city_rows": rows,
+            "country_rows": country_rows,
+            "activity_rows": activity_rows,
+            "map_points": map_points,
+            "article_rows": article_rows,
+            "timeline_rows": timeline_rows,
+            "city_total": len(rows),
+            "country_total": len(country_rows),
+            "author_total": base_queryset.values("author_id").distinct().count(),
+            "article_total": base_queryset.values("article_id").distinct().count(),
+            "top_city": rows[0] if rows else None,
+            "chart_data": chart_payload,
+            "timeline_data": timeline_payload,
+        }
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context.update(self.build_data())
+        context["map_payload"] = json.dumps(context["map_points"], ensure_ascii=False)
+        context["city_payload"] = json.dumps(context["city_rows"], ensure_ascii=False)
+        context["chart_payload"] = json.dumps(context["chart_data"], ensure_ascii=False)
+        context["country_payload"] = json.dumps(context["country_rows"], ensure_ascii=False)
+        context["activity_payload"] = json.dumps(context["activity_rows"], ensure_ascii=False)
+        context["selected_city_payload_json"] = json.dumps(context["selected_city_payload"], ensure_ascii=False)
+        context["timeline_payload"] = json.dumps(context["timeline_data"], ensure_ascii=False)
+        return context
+
+
+class GeographyDataView(GeographyDashboardView, View):
+    def get(self, request, *args, **kwargs):
+        self.request = request
+        data = self.build_data()
+        return JsonResponse(
             {
-                "year_values": year_values,
-                "selected_year": selected_year,
-                "selected_city": selected_city,
-                "city_rows": rows,
-                "map_points": map_points,
-                "article_rows": article_rows,
-                "timeline_rows": timeline_rows,
-                "city_total": len(rows),
-                "author_total": base_queryset.values("author_id").distinct().count(),
-                "article_total": base_queryset.values("article_id").distinct().count(),
-                "top_city": rows[0] if rows else None,
-                "map_payload": json.dumps(map_points, ensure_ascii=False),
-                "chart_payload": json.dumps(
-                    {
-                        "labels": [row["display_name"] for row in rows[:10]],
-                        "authors": [row["author_count"] for row in rows[:10]],
-                        "articles": [row["article_count"] for row in rows[:10]],
-                    },
-                    ensure_ascii=False,
-                ),
-                "timeline_payload": json.dumps(
-                    {
-                        "labels": [str(row["article__issue__year"]) for row in timeline_rows],
-                        "articles": [row["article_count"] for row in timeline_rows],
-                        "authors": [row["author_count"] for row in timeline_rows],
-                    },
-                    ensure_ascii=False,
-                ),
+                "selected_year": data["selected_year"],
+                "selected_city": data["selected_city_payload"],
+                "city_rows": data["city_rows"],
+                "country_rows": data["country_rows"],
+                "activity_rows": data["activity_rows"],
+                "map_points": data["map_points"],
+                "article_rows": data["article_rows"],
+                "city_total": data["city_total"],
+                "country_total": data["country_total"],
+                "author_total": data["author_total"],
+                "article_total": data["article_total"],
+                "top_city": data["top_city"],
+                "chart": data["chart_data"],
+                "timeline": data["timeline_data"],
             }
         )
-        return context
 
 
 def split_article_chunks(body_text: str, *, max_chars: int = 1200) -> list[dict[str, int | str]]:
@@ -811,7 +939,11 @@ class SuggestionView(View):
             return titles[: self.limit]
 
         if kind == "cities":
-            queryset = CityLocation.objects.order_by("display_name")
+            queryset = (
+                CityLocation.objects.filter(affiliations__article_authors__article__is_published=True)
+                .distinct()
+                .order_by("display_name")
+            )
             if query:
                 queryset = queryset.filter(display_name__icontains=query)
             return list(queryset.values_list("display_name", flat=True)[: self.limit])
