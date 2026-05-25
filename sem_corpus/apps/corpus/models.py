@@ -507,15 +507,20 @@ class SavedSubcorpus(TimestampedModel):
             ],
             ignore_conflicts=True,
         )
-        self.article_count = self.articles.count()
-        self.token_count = (
-            self.articles.select_related("text").aggregate(total=Sum("text__token_count")).get("total") or 0
-        )
+        articles = Article.objects.filter(subcorpus_links__subcorpus=self).distinct()
+        self.article_count = articles.count()
+        self.token_count = articles.aggregate(total=Sum("text__token_count")).get("total") or 0
         self.save(update_fields=["article_count", "token_count", "updated_at"])
 
     @property
     def has_filter_payload(self) -> bool:
-        return any(value not in ("", None, []) for value in (self.filter_payload or {}).values())
+        payload = self.filter_payload or {}
+        meaningful_items = {
+            key: value
+            for key, value in payload.items()
+            if key != "search_mode" and value not in ("", None, [])
+        }
+        return bool(meaningful_items)
 
     def get_source_search_url(self) -> str:
         base_url = reverse("corpus:search")

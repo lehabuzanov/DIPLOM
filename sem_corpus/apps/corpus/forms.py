@@ -120,6 +120,30 @@ class AddToSubcorpusForm(forms.Form):
         self.fields["subcorpus"].queryset = SavedSubcorpus.objects.filter(user=user)
 
 
+class SubcorpusArticleChoiceField(forms.ModelChoiceField):
+    def label_from_instance(self, obj):
+        issue = getattr(obj, "issue", None)
+        issue_label = f"{issue.year}, т. {issue.volume}, № {issue.number}" if issue else "без выпуска"
+        return f"{issue_label} — {obj.title}"
+
+
+class SubcorpusArticleAddForm(forms.Form):
+    article = SubcorpusArticleChoiceField(label="Статья", queryset=Article.objects.none())
+
+    def __init__(self, *args, **kwargs):
+        subcorpus = kwargs.pop("subcorpus", None)
+        super().__init__(*args, **kwargs)
+        queryset = (
+            Article.objects.published()
+            .select_related("issue")
+            .order_by("-issue__year", "-issue__volume", "title")
+        )
+        if subcorpus and subcorpus.pk:
+            queryset = queryset.exclude(subcorpus_links__subcorpus=subcorpus)
+        self.fields["article"].queryset = queryset
+        self.fields["article"].widget.attrs.update({"class": "form-select"})
+
+
 class EditorArticleUploadForm(forms.Form):
     issue_year = forms.IntegerField(label="Год выпуска")
     issue_volume = forms.CharField(label="Том", max_length=32)

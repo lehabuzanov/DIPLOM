@@ -36,9 +36,7 @@
                     <div class="d-flex flex-wrap gap-2">
                         <a class="btn btn-sm btn-primary" href="{% url 'corpus:subcorpus-detail' subcorpus.pk %}">Открыть</a>
                         <a class="btn btn-sm btn-outline-primary" href="{% url 'analytics:dashboard' %}?subcorpus={{ subcorpus.pk }}">Аналитика</a>
-                        {% if subcorpus.has_filter_payload %}
-                            <a class="btn btn-sm btn-outline-secondary" href="{{ subcorpus.get_source_search_url }}">Изменить условия</a>
-                        {% endif %}
+                        <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:subcorpus-filter-update' subcorpus.pk %}">Изменить фильтры</a>
                         <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:subcorpus-edit' subcorpus.pk %}">Параметры</a>
                         <form method="post" action="{% url 'corpus:subcorpus-delete' subcorpus.pk %}">
                             {% csrf_token %}

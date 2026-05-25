@@ -374,117 +374,11 @@ def clean_article_body_text(
     text = body_text.replace("\r", "\n").replace("\u00ad", "")
     text = re.sub(r"(?<=[A-Za-zА-Яа-яЁё])-\s*\n\s*(?=[A-Za-zА-Яа-яЁё])", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
+
     abstract_words = normalize_whitespace(abstract_text).lower().split()
     abstract_probe = " ".join(abstract_words[:6])
     abstract_fragment = " ".join(abstract_words[:3])
     normalized_lines = [normalize_whitespace(raw_line.replace("", " ")) for raw_line in text.splitlines()]
-    anchor_index = -1
-    intro_index = -1
-    for index, line in enumerate(normalized_lines):
-        if re.match(r"^(введение|introduction)\b", line.lower()):
-            intro_index = index
-            break
-    if abstract_fragment:
-        for index, line in enumerate(normalized_lines):
-            if abstract_fragment in line.lower():
-                anchor_index = index
-                break
-    if anchor_index < 0 and abstract_probe:
-        for index in range(len(normalized_lines)):
-            window = normalize_whitespace(" ".join(normalized_lines[index : index + 3])).lower()
-            if abstract_probe and abstract_probe in window:
-                anchor_index = index
-                break
-
-    content_started = False
-    kept_lines: list[str] = []
-    current_paragraph: list[str] = []
-
-    def flush_paragraph() -> None:
-        nonlocal current_paragraph
-        if current_paragraph:
-            kept_lines.append(" ".join(current_paragraph).strip())
-            current_paragraph = []
-
-    for index, line in enumerate(normalized_lines):
-        lowered = line.lower()
-
-        if not line:
-            flush_paragraph()
-            continue
-
-        marker_line = _is_trailing_marker_line(lowered)
-        if marker_line:
-            if content_started:
-                flush_paragraph()
-                break
-            continue
-
-        if HEADER_NOISE_RE.match(lowered) or PAGE_NUMBER_RE.fullmatch(line) or re.match(r"^раздел\s+\d+", lowered):
-            continue
-        if re.match(r"^\d+[.)]?\s", line) and "url:" in lowered and "дата обращения" in lowered:
-            continue
-
-        if not content_started:
-            if intro_index >= 0 and index < intro_index:
-                continue
-            if intro_index >= 0 and index == intro_index:
-                content_started = True
-                current_paragraph = []
-                continue
-            if anchor_index >= 0 and index < anchor_index:
-                continue
-            if anchor_index >= 0 and index == anchor_index:
-                content_started = True
-                current_paragraph.append(line)
-                continue
-            if ALL_CAPS_LINE_RE.fullmatch(line):
-                continue
-            if AFFILIATION_HINT_RE.search(lowered) and len(line.split()) <= 12:
-                continue
-            if line.count(".") >= 2 and len(line.split()) <= 8:
-                continue
-            if len(line.split()) >= 8 and any(char.islower() for char in line):
-                content_started = True
-            else:
-                continue
-
-        current_paragraph.append(line)
-
-    flush_paragraph()
-
-    paragraphs = _drop_duplicate_leading_paragraphs(kept_lines, title, abstract_text)
-    while paragraphs and _looks_like_metadata_paragraph(paragraphs[0]):
-        paragraphs.pop(0)
-    while paragraphs and _looks_like_metadata_paragraph(paragraphs[-1]):
-        paragraphs.pop()
-
-    result = "\n\n".join(paragraphs).strip()
-    result = re.sub(r"\s+([,.;:!?])", r"\1", result)
-    result = re.sub(r"([(\[{])\s+", r"\1", result)
-    result = re.sub(r"\s+([)\]}])", r"\1", result)
-    return result
-
-
-def clean_article_body_text(
-    body_text: str,
-    *,
-    title: str = "",
-    abstract_text: str = "",
-    keywords_text: str = "",
-    language: str = "ru",
-) -> str:
-    if not body_text:
-        return ""
-
-    text = body_text.replace("\r", "\n").replace("\u00ad", "")
-    text = re.sub(r"(?<=[A-Za-zА-Яа-яЁё])-\s*\n\s*(?=[A-Za-zА-Яа-яЁё])", "", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-
-    abstract_words = normalize_whitespace(abstract_text).lower().split()
-    abstract_probe = " ".join(abstract_words[:6])
-    abstract_fragment = " ".join(abstract_words[:3])
-    normalized_lines = [normalize_whitespace(raw_line.replace("пЂ ", " ")) for raw_line in text.splitlines()]
     title_index, title_end_index = _find_title_anchor(normalized_lines, title)
 
     anchor_index = -1
@@ -757,6 +651,8 @@ def apply_article_filters(queryset, filters):
 
 def resolve_articles_for_saved_payload(payload: str | dict | None):
     payload_data = sanitize_saved_payload(payload)
+    if not payload_data or set(payload_data) <= {"search_mode"}:
+        return []
     base_queryset = Article.objects.published().select_related("text", "issue", "section", "journal").prefetch_related(
         "article_authors__author",
         "keywords",
@@ -842,7 +738,7 @@ def search_articles(form, user=None, *, record_history: bool = True):
     results = []
 
     if not query_text:
-        result_articles = list(queryset[:50])
+        result_articles = list(queryset)
         results = [{"article": article, "contexts": [], "hit_count": 0} for article in result_articles]
     elif search_mode in {SearchHistory.SEARCH_FULLTEXT, SearchHistory.SEARCH_PHRASE}:
         search_config = _resolve_search_config(query_text)
@@ -951,8 +847,9 @@ def update_saved_query(query: SavedQuery, name: str, description: str, payload: 
 
 
 def refresh_subcorpus_totals(subcorpus: SavedSubcorpus) -> None:
-    subcorpus.article_count = subcorpus.articles.count()
-    subcorpus.token_count = subcorpus.articles.aggregate(total=Sum("text__token_count")).get("total") or 0
+    articles = Article.objects.filter(subcorpus_links__subcorpus=subcorpus).distinct()
+    subcorpus.article_count = articles.count()
+    subcorpus.token_count = articles.aggregate(total=Sum("text__token_count")).get("total") or 0
     subcorpus.save(update_fields=["article_count", "token_count", "updated_at"])
 
 

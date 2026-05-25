@@ -21,6 +21,7 @@ from sem_corpus.apps.corpus.forms import (
     SavedQueryEditForm,
     SavedSubcorpusForm,
     SearchForm,
+    SubcorpusArticleAddForm,
 )
 from sem_corpus.apps.corpus.models import (
     Affiliation,
@@ -35,6 +36,7 @@ from sem_corpus.apps.corpus.models import (
     Journal,
     SavedQuery,
     SavedSubcorpus,
+    SavedSubcorpusArticle,
     SearchHistory,
     Section,
     payload_to_querystring,
@@ -50,6 +52,7 @@ from sem_corpus.apps.corpus.services import (
     refresh_subcorpus_totals,
     save_query,
     search_articles,
+    serialize_filter_values,
     serialize_querydict,
     sync_keywords_for_article,
     update_saved_query,
@@ -114,6 +117,20 @@ def resolve_file_kind(filename: str) -> str:
     if suffix == ".txt":
         return ArticleFile.KIND_TXT
     return ArticleFile.KIND_OTHER
+
+
+SUBCORPUS_LAST_REMOVED_SESSION_KEY = "last_removed_subcorpus_article"
+
+
+def build_subcorpus_filter_payload(cleaned_data: dict) -> dict:
+    payload = serialize_filter_values(cleaned_data)
+    if not payload.get("text_query"):
+        payload.pop("search_mode", None)
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in {"page", "saved_query", "subcorpus"} and value not in ("", None, [])
+    }
 
 
 def create_or_update_editor_article(cleaned_data) -> Article:
@@ -991,7 +1008,7 @@ class SaveQueryView(LoginRequiredMixin, FormView):
                 form.cleaned_data["serialized_query"],
                 result_count=result_count,
             )
-            messages.success(self.request, "РЎРѕС…СЂР°РЅРµРЅРЅР°СЏ РІС‹Р±РѕСЂРєР° РѕР±РЅРѕРІР»РµРЅР°.")
+            messages.success(self.request, "Сохраненный запрос обновлен.")
             return redirect("accounts:dashboard")
         save_query(
             self.request.user,
@@ -1047,7 +1064,7 @@ class SavedQueryUpdateView(UserOwnedObjectMixin, FormView):
         query.name = form.cleaned_data["name"]
         query.description = form.cleaned_data["description"]
         query.save(update_fields=["name", "description", "updated_at"])
-        messages.success(self.request, "РџР°СЂР°РјРµС‚СЂС‹ СЃРѕС…СЂР°РЅРµРЅРЅРѕР№ РІС‹Р±РѕСЂРєРё РѕР±РЅРѕРІР»РµРЅС‹.")
+        messages.success(self.request, "Параметры сохраненного запроса обновлены.")
         return redirect("corpus:saved-query-list")
 
 
@@ -1059,7 +1076,7 @@ class SavedQueryDeleteView(UserOwnedObjectMixin, View):
         query = self.get_object()
         query_name = query.name
         query.delete()
-        messages.success(request, f"Р’С‹Р±РѕСЂРєР° «{query_name}» СѓРґР°Р»РµРЅР°.")
+        messages.success(request, f"Запрос «{query_name}» удален.")
         return redirect("corpus:saved-query-list")
 
 
@@ -1124,8 +1141,110 @@ class SavedSubcorpusDetailView(LoginRequiredMixin, DetailView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["filter_summary"] = describe_query_payload(self.object.filter_payload)
+        subcorpus = self.object
+        context["filter_summary"] = describe_query_payload(subcorpus.filter_payload)
+        context["add_article_form"] = SubcorpusArticleAddForm(subcorpus=subcorpus)
+        context["article_links"] = (
+            subcorpus.subcorpus_articles.select_related("article", "article__issue", "article__section")
+            .prefetch_related("article__article_authors__author")
+            .order_by("article__issue__year", "article__title", "id")
+        )
+        removed_payload = self.request.session.get(SUBCORPUS_LAST_REMOVED_SESSION_KEY) or {}
+        removed_article = None
+        if removed_payload.get("subcorpus_id") == subcorpus.pk:
+            removed_article = Article.objects.filter(pk=removed_payload.get("article_id"), is_published=True).first()
+        context["removed_article"] = removed_article
         return context
+
+
+class SavedSubcorpusFilterUpdateView(SavedSubcorpusDetailView):
+    model = SavedSubcorpus
+    template_name = "corpus/subcorpus_filters.html"
+    http_method_names = ["get", "post"]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["filter_form"] = SearchForm(initial=self.object.filter_payload or {})
+        return context
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        form = SearchForm(request.POST)
+        if not form.is_valid():
+            messages.error(request, "Проверьте условия отбора: часть значений заполнена некорректно.")
+            return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+        subcorpus.filter_payload = build_subcorpus_filter_payload(form.cleaned_data)
+        subcorpus.save(update_fields=["filter_payload", "updated_at"])
+        subcorpus.refresh_membership()
+        messages.success(request, "Фильтры применены, состав подкорпуса обновлен.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+
+class SavedSubcorpusArticleAddView(UserOwnedObjectMixin, View):
+    model = SavedSubcorpus
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        form = SubcorpusArticleAddForm(request.POST, subcorpus=subcorpus)
+        if not form.is_valid():
+            messages.error(request, "Выберите статью, которой еще нет в этом подкорпусе.")
+            return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+        article = form.cleaned_data["article"]
+        add_article_to_subcorpus(subcorpus, article)
+        request.session.pop(SUBCORPUS_LAST_REMOVED_SESSION_KEY, None)
+        messages.success(request, f"Статья «{article.title}» добавлена в подкорпус.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+
+class SavedSubcorpusArticleRemoveView(UserOwnedObjectMixin, View):
+    model = SavedSubcorpus
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        link = get_object_or_404(
+            SavedSubcorpusArticle.objects.select_related("article"),
+            subcorpus=subcorpus,
+            article_id=kwargs["article_pk"],
+        )
+        removed_payload = {
+            "subcorpus_id": subcorpus.pk,
+            "article_id": link.article_id,
+            "source": link.source,
+        }
+        article_title = link.article.title
+        link.delete()
+        refresh_subcorpus_totals(subcorpus)
+        request.session[SUBCORPUS_LAST_REMOVED_SESSION_KEY] = removed_payload
+        request.session.modified = True
+        messages.success(request, f"Статья «{article_title}» убрана только из этого подкорпуса.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+
+class SavedSubcorpusArticleRestoreView(UserOwnedObjectMixin, View):
+    model = SavedSubcorpus
+    http_method_names = ["post"]
+
+    def post(self, request, *args, **kwargs):
+        subcorpus = self.get_object()
+        removed_payload = request.session.get(SUBCORPUS_LAST_REMOVED_SESSION_KEY) or {}
+        if removed_payload.get("subcorpus_id") != subcorpus.pk:
+            messages.error(request, "Нет статьи для возврата в этот подкорпус.")
+            return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
+
+        article = get_object_or_404(Article.objects.published(), pk=removed_payload.get("article_id"))
+        SavedSubcorpusArticle.objects.get_or_create(
+            subcorpus=subcorpus,
+            article=article,
+            defaults={"source": removed_payload.get("source") or SavedSubcorpusArticle.SOURCE_MANUAL},
+        )
+        refresh_subcorpus_totals(subcorpus)
+        request.session.pop(SUBCORPUS_LAST_REMOVED_SESSION_KEY, None)
+        messages.success(request, f"Статья «{article.title}» возвращена в подкорпус.")
+        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
 
 
 class SavedSubcorpusUpdateView(UserOwnedObjectMixin, FormView):
@@ -1161,13 +1280,6 @@ class SavedSubcorpusUpdateView(UserOwnedObjectMixin, FormView):
         )
         messages.success(self.request, "Параметры подкорпуса обновлены.")
         return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
-        subcorpus = self.get_object()
-        subcorpus.name = form.cleaned_data["name"]
-        subcorpus.description = form.cleaned_data["description"]
-        subcorpus.is_public = form.cleaned_data["is_public"]
-        subcorpus.save(update_fields=["name", "description", "is_public", "updated_at"])
-        messages.success(self.request, "РџР°СЂР°РјРµС‚СЂС‹ РїРѕРґРєРѕСЂРїСѓСЃР° РѕР±РЅРѕРІР»РµРЅС‹.")
-        return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
 
 
 class SavedSubcorpusRefreshView(UserOwnedObjectMixin, View):
@@ -1177,7 +1289,7 @@ class SavedSubcorpusRefreshView(UserOwnedObjectMixin, View):
     def post(self, request, *args, **kwargs):
         subcorpus = self.get_object()
         subcorpus.refresh_membership()
-        messages.success(request, "РЎРѕСЃС‚Р°РІ РїРѕРґРєРѕСЂРїСѓСЃР° РѕР±РЅРѕРІР»РµРЅ РїРѕ РёСЃС…РѕРґРЅС‹Рј С„РёР»СЊС‚СЂР°Рј.")
+        messages.success(request, "Состав подкорпуса обновлен по сохраненным фильтрам.")
         return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
 
 
@@ -1189,7 +1301,7 @@ class SavedSubcorpusDeleteView(UserOwnedObjectMixin, View):
         subcorpus = self.get_object()
         subcorpus_name = subcorpus.name
         subcorpus.delete()
-        messages.success(request, f"РџРѕРґРєРѕСЂРїСѓСЃ «{subcorpus_name}» СѓРґР°Р»РµРЅ.")
+        messages.success(request, f"Подкорпус «{subcorpus_name}» удален.")
         return redirect("corpus:subcorpus-list")
 
 

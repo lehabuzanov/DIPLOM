@@ -1338,3 +1338,34 @@ label {
     color: var(--accent-strong);
     box-shadow: none;
 }
+
+.subcorpus-article-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.subcorpus-article-main {
+    min-width: 0;
+}
+
+.subcorpus-remove-btn {
+    width: 2.25rem;
+    height: 2.25rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+@media (max-width: 575.98px) {
+    .subcorpus-article-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .subcorpus-remove-btn {
+        width: 100%;
+    }
+}
