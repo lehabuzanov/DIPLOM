@@ -1,7 +1,14 @@
 from django.contrib.auth import get_user_model
 from django.core.management.base import BaseCommand
 
-from sem_corpus.apps.accounts.models import Role
+from sem_corpus.apps.accounts.access import (
+    ROLE_ADMINISTRATOR,
+    ROLE_EDITOR,
+    ROLE_RESEARCHER,
+    assign_role,
+    ensure_access_control,
+)
+from sem_corpus.apps.accounts.models import UserProfile
 from sem_corpus.apps.corpus.models import Journal
 
 
@@ -10,6 +17,13 @@ User = get_user_model()
 
 class Command(BaseCommand):
     help = "Creates base roles, service users and journal metadata without loading demo articles."
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            "--reset-passwords",
+            action="store_true",
+            help="Reset passwords for built-in local demo users. Do not use in production.",
+        )
 
     def handle(self, *args, **options):
         Journal.objects.get_or_create(
@@ -23,49 +37,35 @@ class Command(BaseCommand):
             },
         )
 
-        roles = {
-            "researcher": Role.objects.get_or_create(
-                slug="researcher",
-                defaults={"name": "Исследователь", "can_save_queries": True},
-            )[0],
-            "editor": Role.objects.get_or_create(
-                slug="editor",
-                defaults={"name": "Редактор", "can_edit_content": True, "can_run_imports": True, "can_save_queries": True},
-            )[0],
-            "administrator": Role.objects.get_or_create(
-                slug="administrator",
-                defaults={
-                    "name": "Администратор",
-                    "can_manage_users": True,
-                    "can_edit_content": True,
-                    "can_run_imports": True,
-                    "can_save_queries": True,
-                },
-            )[0],
-        }
+        ensure_access_control()
+        reset_passwords = options["reset_passwords"]
 
-        researcher, _ = User.objects.get_or_create(
+        researcher, researcher_created = User.objects.get_or_create(
             username="researcher",
             defaults={"email": "researcher@example.com", "first_name": "Научный", "last_name": "Пользователь"},
         )
-        researcher.set_password("research123")
+        if researcher_created or reset_passwords:
+            researcher.set_password("research123")
         researcher.save()
-        researcher.profile.institution = "ИжГТУ имени М. Т. Калашникова"
-        researcher.profile.primary_role = roles["researcher"]
-        researcher.profile.save()
+        researcher_profile, _ = UserProfile.objects.get_or_create(user=researcher)
+        researcher_profile.institution = "ИжГТУ имени М. Т. Калашникова"
+        researcher_profile.save()
+        assign_role(researcher, ROLE_RESEARCHER)
 
-        editor, _ = User.objects.get_or_create(
+        editor, editor_created = User.objects.get_or_create(
             username="editor",
             defaults={"email": "editor@example.com", "first_name": "Редактор", "last_name": "Корпуса", "is_staff": True},
         )
         editor.is_staff = True
-        editor.set_password("editor123")
+        if editor_created or reset_passwords:
+            editor.set_password("editor123")
         editor.save()
-        editor.profile.institution = "ИжГТУ имени М. Т. Калашникова"
-        editor.profile.primary_role = roles["editor"]
-        editor.profile.save()
+        editor_profile, _ = UserProfile.objects.get_or_create(user=editor)
+        editor_profile.institution = "ИжГТУ имени М. Т. Калашникова"
+        editor_profile.save()
+        assign_role(editor, ROLE_EDITOR)
 
-        admin_user, _ = User.objects.get_or_create(
+        admin_user, admin_created = User.objects.get_or_create(
             username="admin",
             defaults={
                 "email": "admin@example.com",
@@ -77,12 +77,16 @@ class Command(BaseCommand):
         )
         admin_user.is_staff = True
         admin_user.is_superuser = True
-        admin_user.set_password("admin123")
+        if admin_created or reset_passwords:
+            admin_user.set_password("admin123")
         admin_user.save()
-        admin_user.profile.primary_role = roles["administrator"]
-        admin_user.profile.save()
+        assign_role(admin_user, ROLE_ADMINISTRATOR)
 
         self.stdout.write(self.style.SUCCESS("Служебные роли и пользователи подготовлены."))
-        self.stdout.write("Пользователь researcher / пароль research123")
-        self.stdout.write("Пользователь editor / пароль editor123")
-        self.stdout.write("Пользователь admin / пароль admin123")
+        if reset_passwords:
+            self.stdout.write("Пароли локальных демо-пользователей сброшены.")
+            self.stdout.write("Пользователь researcher / пароль research123")
+            self.stdout.write("Пользователь editor / пароль editor123")
+            self.stdout.write("Пользователь admin / пароль admin123")
+        else:
+            self.stdout.write("Существующие пароли не изменялись.")

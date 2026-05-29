@@ -48,7 +48,7 @@
     {% endif %}
 </div>
 
-{% if request.user.is_authenticated and results %}
+{% if can_use_personal_tools and results %}
     <div class="accordion search-tools-accordion mb-4" id="searchToolsAccordion">
         <div class="accordion-item">
             <h3 class="accordion-header">
@@ -109,7 +109,7 @@
     </div>
 {% endif %}
 
-{% if request.user.is_authenticated and recent_searches %}
+{% if can_use_personal_tools and recent_searches %}
     <div class="accordion search-tools-accordion mb-4" id="recentSearchAccordion">
         <div class="accordion-item">
             <h3 class="accordion-header">

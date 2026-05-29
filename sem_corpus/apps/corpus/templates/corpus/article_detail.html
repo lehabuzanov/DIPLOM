@@ -43,7 +43,7 @@
                     <a class="btn btn-sm btn-outline-secondary" href="{% url 'corpus:search' %}?text_query={{ article.title|urlencode }}">Искать по статье</a>
                 </div>
                 {% if article_text %}
-                    {% if request.user.is_authenticated %}
+                    {% if can_use_personal_tools %}
                         <div class="article-highlight-hint" id="article-highlight-hint">
                             <span class="small text-secondary">Выделите фрагмент текста мышью, чтобы сохранить пометку.</span>
                             <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}">Мои пометки</a>
@@ -72,8 +72,12 @@
                         </div>
                     {% else %}
                         <div class="article-highlight-hint">
-                            <span class="small text-secondary">Войдите, чтобы сохранять пометки к фрагментам статьи.</span>
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>
+                            {% if request.user.is_authenticated %}
+                                <span class="small text-secondary">Для сохранения пометок нужна роль исследователя, редактора или администратора.</span>
+                            {% else %}
+                                <span class="small text-secondary">Войдите, чтобы сохранять пометки к фрагментам статьи.</span>
+                                <a class="btn btn-sm btn-outline-primary" href="{% url 'login' %}?next={{ request.path|urlencode }}">Войти</a>
+                            {% endif %}
                         </div>
                     {% endif %}
                     <div
@@ -81,7 +85,7 @@
                         id="article-reader"
                         data-url="{% url 'corpus:article-text-data' article.slug %}"
                         data-highlights-url="{% url 'corpus:article-highlights' article.slug %}"
-                        data-can-highlight="{% if request.user.is_authenticated %}true{% else %}false{% endif %}"
+                        data-can-highlight="{% if can_use_personal_tools %}true{% else %}false{% endif %}"
                     >
                         <div class="article-text" id="article-text-body">
                             <p class="text-secondary mb-0">Загрузка текста статьи...</p>
@@ -131,7 +135,7 @@
             </div>
         {% endif %}
 
-        {% if request.user.is_authenticated %}
+        {% if can_use_personal_tools %}
             <div class="card surface-card mb-4">
                 <div class="card-body">
                     <h2 class="h5 mb-3">Добавить в подкорпус</h2>

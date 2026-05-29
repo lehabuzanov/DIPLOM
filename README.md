@@ -74,7 +74,7 @@ docker compose down -v
 - устанавливает зависимости;
 - применяет миграции;
 - удаляет старый демонстрационный контент;
-- создает служебные роли и учетные записи;
+- создает и синхронизирует роли, группы Django и права доступа;
 - поднимает сайт на `8000` порту.
 
 ## Загрузка полного архива журнала
@@ -156,21 +156,73 @@ docker compose exec web python manage.py sync_ojs_journal --skip-existing
 /admin/
 ```
 
-## Служебные учетные записи
+## Пользователи, роли и пароли
 
-- `researcher` / `research123`
-- `editor` / `editor123`
-- `admin` / `admin123`
+При обычном запуске Docker больше не создает и не сбрасывает пароли демонстрационных пользователей.
+Команда запуска только подготавливает роли и права:
+
+```powershell
+docker compose exec web python manage.py prepare_access_control --assign-missing-researcher
+```
+
+Роли:
+
+- `Исследователь` — сохраняет запросы, подкорпуса и пометки, использует аналитику;
+- `Редактор` — имеет права исследователя, открывает `/admin/`, редактирует модели корпуса и загружает статьи;
+- `Администратор` — управляет пользователями, ролями, группами и всеми данными корпуса.
+
+Новые пользователи после регистрации автоматически получают роль `Исследователь`.
+Роли редактора и администратора назначаются только через административную панель.
+
+Первого администратора для нового развертывания создайте штатной командой Django:
+
+```powershell
+docker compose exec web python manage.py createsuperuser
+```
+
+Если в локальной демонстрационной БД уже есть старые учетные записи `admin`, `editor`, `researcher`,
+сначала можно синхронизировать их роли без изменения паролей:
+
+```powershell
+docker compose exec web python manage.py prepare_access_control --assign-missing-researcher --sync-service-users
+```
+
+После этого смените им пароли через `/accounts/password/change/`, через `/admin/` или командой:
+
+```powershell
+docker compose exec web python manage.py changepassword admin
+```
+
+Для локальной демонстрации можно явно создать/обновить старые демо-аккаунты, но эту команду нельзя использовать в production:
+
+```powershell
+docker compose exec web python manage.py seed_demo_data --reset-passwords
+```
+
+## Настройки для размещения
+
+Перед публикацией на хостинге журнала в `.env` нужно задать боевые значения:
+
+- `DJANGO_DEBUG=0`;
+- длинный случайный `DJANGO_SECRET_KEY`;
+- реальные `DJANGO_ALLOWED_HOSTS` и `DJANGO_CSRF_TRUSTED_ORIGINS`;
+- `DJANGO_SECURE_SSL_REDIRECT=1`, `DJANGO_SESSION_COOKIE_SECURE=1`, `DJANGO_CSRF_COOKIE_SECURE=1` при работе через HTTPS;
+- `DJANGO_SECURE_HSTS_SECONDS`, если домен полностью обслуживается по HTTPS;
+- SMTP-параметры `DJANGO_EMAIL_*`, если будет включаться отправка писем.
+
+Подтверждение email в текущей версии не включено: без реального SMTP это было бы только демонстрацией через консольный backend.
 
 ## Полезные команды
 
 ```powershell
+docker compose exec web python manage.py prepare_access_control --assign-missing-researcher
 docker compose exec web python manage.py sync_ojs_journal --skip-existing
 docker compose exec web python manage.py repair_article_texts
 docker compose exec web python manage.py rebuild_corpus_index
 docker compose exec web python manage.py refresh_author_geography
 docker compose exec web python manage.py selfcheck_corpus
 docker compose exec web python manage.py import_corpus_batch --source sample_data/batch_import
+docker compose exec web python manage.py changepassword admin
 ```
 
 ## Локальный запуск без Docker
@@ -190,7 +242,7 @@ python -m pip install -r requirements.txt
 ```powershell
 python manage.py migrate
 python manage.py purge_demo_content
-python manage.py seed_demo_data
+python manage.py prepare_access_control --assign-missing-researcher
 ```
 
 5. Импортируйте архив:

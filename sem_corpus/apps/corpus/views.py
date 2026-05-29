@@ -13,7 +13,7 @@ from django.utils.text import slugify
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
 from razdel import sentenize
 
-from sem_corpus.apps.accounts.utils import user_can_edit_corpus
+from sem_corpus.apps.accounts.utils import user_can_edit_corpus, user_can_use_personal_tools
 from sem_corpus.apps.corpus.forms import (
     AddToSubcorpusForm,
     EditorArticleUploadForm,
@@ -253,7 +253,12 @@ class EditorRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
         return user_can_edit_corpus(self.request.user)
 
 
-class UserOwnedObjectMixin(LoginRequiredMixin):
+class PersonalToolsRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return user_can_use_personal_tools(self.request.user)
+
+
+class UserOwnedObjectMixin(PersonalToolsRequiredMixin):
     model = None
 
     def get_object(self):
@@ -368,7 +373,7 @@ class ArticleDetailView(DetailView):
             .exclude(pk=article.pk)
             .select_related("issue", "section")[:4]
         )
-        if self.request.user.is_authenticated:
+        if user_can_use_personal_tools(self.request.user):
             context["add_to_subcorpus_form"] = AddToSubcorpusForm(user=self.request.user)
         return context
 
@@ -772,7 +777,7 @@ class ArticleHighlightDataView(View):
 
     def get(self, request, slug, *args, **kwargs):
         article = self.get_article(slug)
-        if not request.user.is_authenticated:
+        if not user_can_use_personal_tools(request.user):
             return JsonResponse({"items": []})
         highlights = ArticleHighlight.objects.filter(user=request.user, article=article)
         return JsonResponse({"items": [self.serialize_highlight(item) for item in highlights]})
@@ -780,6 +785,8 @@ class ArticleHighlightDataView(View):
     def post(self, request, slug, *args, **kwargs):
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Требуется вход в систему."}, status=403)
+        if not user_can_use_personal_tools(request.user):
+            return JsonResponse({"error": "Недостаточно прав для сохранения пометок."}, status=403)
 
         article = self.get_article(slug)
         article_text = getattr(article, "text", None)
@@ -822,7 +829,7 @@ class ArticleHighlightDataView(View):
         return JsonResponse(self.serialize_highlight(highlight), status=201)
 
 
-class ArticleHighlightDeleteView(LoginRequiredMixin, View):
+class ArticleHighlightDeleteView(PersonalToolsRequiredMixin, View):
     http_method_names = ["post"]
 
     def post(self, request, pk, *args, **kwargs):
@@ -834,7 +841,7 @@ class ArticleHighlightDeleteView(LoginRequiredMixin, View):
         return redirect("accounts:highlights")
 
 
-class ArticleHighlightUpdateView(LoginRequiredMixin, View):
+class ArticleHighlightUpdateView(PersonalToolsRequiredMixin, View):
     MAX_NOTE_LENGTH = 1200
     http_method_names = ["post"]
 
@@ -904,7 +911,7 @@ class SearchView(TemplateView):
         )
         context["saved_query"] = saved_query
         context["saved_subcorpus"] = saved_subcorpus
-        if self.request.user.is_authenticated:
+        if user_can_use_personal_tools(self.request.user):
             recent_searches = list(SearchHistory.objects.filter(user=self.request.user)[:6])
             for item in recent_searches:
                 filters = dict(item.filters or {})
@@ -989,7 +996,7 @@ class SuggestionView(View):
         return JsonResponse({"items": self.get_values(kind, query)})
 
 
-class SaveQueryView(LoginRequiredMixin, FormView):
+class SaveQueryView(PersonalToolsRequiredMixin, FormView):
     form_class = SaveQueryForm
     http_method_names = ["post"]
 
@@ -1021,7 +1028,7 @@ class SaveQueryView(LoginRequiredMixin, FormView):
         return redirect("accounts:dashboard")
 
 
-class SavedQueryListView(LoginRequiredMixin, ListView):
+class SavedQueryListView(PersonalToolsRequiredMixin, ListView):
     template_name = "corpus/saved_query_list.html"
     context_object_name = "saved_queries"
     paginate_by = 20
@@ -1080,7 +1087,7 @@ class SavedQueryDeleteView(UserOwnedObjectMixin, View):
         return redirect("corpus:saved-query-list")
 
 
-class SavedSubcorpusListView(LoginRequiredMixin, ListView):
+class SavedSubcorpusListView(PersonalToolsRequiredMixin, ListView):
     template_name = "corpus/subcorpus_list.html"
     context_object_name = "subcorpora"
     paginate_by = 20
@@ -1095,7 +1102,7 @@ class SavedSubcorpusListView(LoginRequiredMixin, ListView):
         return context
 
 
-class SavedSubcorpusCreateView(LoginRequiredMixin, FormView):
+class SavedSubcorpusCreateView(PersonalToolsRequiredMixin, FormView):
     template_name = "corpus/subcorpus_create.html"
     form_class = SavedSubcorpusForm
 
@@ -1128,7 +1135,7 @@ class SavedSubcorpusCreateView(LoginRequiredMixin, FormView):
         return redirect("corpus:subcorpus-detail", pk=subcorpus.pk)
 
 
-class SavedSubcorpusDetailView(LoginRequiredMixin, DetailView):
+class SavedSubcorpusDetailView(PersonalToolsRequiredMixin, DetailView):
     template_name = "corpus/subcorpus_detail.html"
     context_object_name = "subcorpus"
 
@@ -1321,7 +1328,7 @@ class ArticleFileAccessView(View):
         raise Http404("Article file is unavailable.")
 
 
-class AddArticleToSubcorpusView(LoginRequiredMixin, FormView):
+class AddArticleToSubcorpusView(PersonalToolsRequiredMixin, FormView):
     form_class = AddToSubcorpusForm
     http_method_names = ["post"]
 

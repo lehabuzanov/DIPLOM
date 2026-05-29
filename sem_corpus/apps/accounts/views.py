@@ -2,13 +2,13 @@ from collections import OrderedDict
 
 from django.contrib import messages
 from django.contrib.auth import login
-from django.contrib.auth.mixins import LoginRequiredMixin
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.shortcuts import redirect
 from django.views.generic import FormView, TemplateView
 
 from sem_corpus.apps.accounts.forms import RegistrationForm
 from sem_corpus.apps.accounts.models import UserActivity
-from sem_corpus.apps.accounts.utils import repair_legacy_mojibake
+from sem_corpus.apps.accounts.utils import repair_legacy_mojibake, user_can_use_personal_tools
 from sem_corpus.apps.corpus.models import ArticleHighlight, SavedQuery, SavedSubcorpus
 from sem_corpus.apps.corpus.services import describe_query_payload
 
@@ -52,7 +52,12 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         return context
 
 
-class HighlightListView(LoginRequiredMixin, TemplateView):
+class PersonalToolsRequiredMixin(LoginRequiredMixin, UserPassesTestMixin):
+    def test_func(self):
+        return user_can_use_personal_tools(self.request.user)
+
+
+class HighlightListView(PersonalToolsRequiredMixin, TemplateView):
     template_name = "accounts/highlight_list.html"
 
     def get_context_data(self, **kwargs):

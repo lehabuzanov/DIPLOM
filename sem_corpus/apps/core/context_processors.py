@@ -1,6 +1,6 @@
 from django.conf import settings
 
-from sem_corpus.apps.accounts.utils import user_can_edit_corpus
+from sem_corpus.apps.accounts.utils import user_can_edit_corpus, user_can_use_personal_tools
 
 
 def site_context(request):
@@ -10,4 +10,5 @@ def site_context(request):
         "university_name": settings.UNIVERSITY_NAME,
         "journal_base_url": settings.JOURNAL_BASE_URL,
         "can_edit_corpus": user_can_edit_corpus(request.user),
+        "can_use_personal_tools": user_can_use_personal_tools(request.user),
     }

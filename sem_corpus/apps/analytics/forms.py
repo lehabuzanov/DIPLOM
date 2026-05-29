@@ -1,6 +1,7 @@
 from django import forms
 from django.db.models import Q
 
+from sem_corpus.apps.accounts.utils import user_can_use_personal_tools
 from sem_corpus.apps.corpus.models import Article, SavedSubcorpus
 from sem_corpus.apps.corpus.services import ANALYTICS_FILTER_CHOICES, ANALYTICS_FILTER_CURATED
 
@@ -53,7 +54,7 @@ class AnalyticsForm(forms.Form):
             .select_related("issue")
             .order_by("-issue__year", "-issue__volume", "title")
         )
-        if user and user.is_authenticated:
+        if user_can_use_personal_tools(user):
             subcorpus_queryset = SavedSubcorpus.objects.filter(Q(user=user) | Q(is_public=True)).distinct()
 
         self.fields["subcorpus"].queryset = subcorpus_queryset
