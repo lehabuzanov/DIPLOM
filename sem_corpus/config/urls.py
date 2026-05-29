@@ -4,13 +4,18 @@ from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
 
+from sem_corpus.apps.accounts.forms import RateLimitedAuthenticationForm
+
 urlpatterns = [
     path("admin/", admin.site.urls),
     path("", include("sem_corpus.apps.core.urls")),
     path("accounts/", include("sem_corpus.apps.accounts.urls")),
     path(
         "accounts/login/",
-        auth_views.LoginView.as_view(template_name="registration/login.html"),
+        auth_views.LoginView.as_view(
+            template_name="registration/login.html",
+            authentication_form=RateLimitedAuthenticationForm,
+        ),
         name="login",
     ),
     path(

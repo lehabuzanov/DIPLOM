@@ -8,7 +8,12 @@
         <div class="card surface-card shadow-sm border-0">
             <div class="card-body p-4 p-lg-5">
                 <h1 class="h3 mb-3">Регистрация исследователя</h1>
-                <p class="text-secondary">После регистрации можно сохранять запросы, формировать подкорпуса и повторно использовать результаты анализа.</p>
+                <p class="text-secondary">
+                    После регистрации можно сохранять запросы, формировать подкорпуса и повторно использовать результаты анализа.
+                    {% if email_confirmation_required %}
+                        Для входа потребуется подтвердить электронную почту.
+                    {% endif %}
+                </p>
                 <form method="post" class="row g-3">
                     {% csrf_token %}
                     {{ form.as_p }}

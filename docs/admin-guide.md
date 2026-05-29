@@ -92,6 +92,44 @@ docker compose exec web python manage.py changepassword username
 
 Старые демонстрационные пароли нельзя оставлять перед размещением на сервере.
 
+## Email и восстановление доступа
+
+В системе есть восстановление пароля через email:
+
+```text
+/accounts/password/reset/
+```
+
+Оно работает через стандартные SMTP-настройки Django из `.env`.
+
+Подтверждение email при регистрации можно включить для production:
+
+```text
+ACCOUNTS_REQUIRE_EMAIL_CONFIRMATION=1
+DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+```
+
+При включенном подтверждении новый пользователь создается неактивным, получает письмо
+со ссылкой активации и входит в систему только после подтверждения адреса.
+
+## Production-запуск
+
+Для размещения на сервере используйте отдельный compose-файл:
+
+```powershell
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+Он запускает:
+
+- PostgreSQL;
+- Django через Gunicorn;
+- Nginx как reverse proxy и сервер статических/media-файлов.
+
+Перед запуском скопируйте `.env.production.example` в `.env` и заполните реальные
+значения `DJANGO_SECRET_KEY`, `DJANGO_ALLOWED_HOSTS`, `DJANGO_CSRF_TRUSTED_ORIGINS`,
+пароль БД и SMTP-настройки.
+
 ## Ручная загрузка статьи
 
 Пользовательская форма:

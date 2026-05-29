@@ -67,6 +67,44 @@ docker compose down
 docker compose down -v
 ```
 
+## Production-запуск через Docker
+
+Для серверного размещения подготовлен отдельный compose-файл с PostgreSQL, Gunicorn, сбором статики и Nginx:
+
+```powershell
+copy .env.production.example .env
+```
+
+Заполните в `.env` домен, секреты, пароль БД и SMTP-настройки, затем выполните:
+
+```powershell
+docker compose -f docker-compose.prod.yml up -d --build
+```
+
+В production-режиме контейнер `web` автоматически:
+
+- применяет миграции;
+- подготавливает роли и права;
+- выполняет `collectstatic`;
+- запускает приложение через `gunicorn`.
+
+Контейнер `nginx`:
+
+- принимает HTTP-запросы;
+- отдает `/static/` и `/media/`;
+- проксирует Django-приложение на `web:8000`;
+- передает заголовки `X-Forwarded-*` для корректной работы HTTPS за reverse proxy.
+
+Если HTTPS завершается на Nginx, используйте пример `nginx/sem_corpus.ssl.conf.example`.
+Если HTTPS завершается внешним прокси, например на стороне хостинга, оставьте обычный Nginx-конфиг и включите в `.env`:
+
+```text
+DJANGO_SECURE_PROXY_SSL_HEADER=1
+DJANGO_USE_X_FORWARDED_HOST=1
+DJANGO_SESSION_COOKIE_SECURE=1
+DJANGO_CSRF_COOKIE_SECURE=1
+```
+
 ## Что происходит при запуске Docker
 
 Контейнер `web` автоматически:
@@ -210,7 +248,14 @@ docker compose exec web python manage.py seed_demo_data --reset-passwords
 - `DJANGO_SECURE_HSTS_SECONDS`, если домен полностью обслуживается по HTTPS;
 - SMTP-параметры `DJANGO_EMAIL_*`, если будет включаться отправка писем.
 
-Подтверждение email в текущей версии не включено: без реального SMTP это было бы только демонстрацией через консольный backend.
+Подтверждение email включается только при реальном SMTP:
+
+```text
+ACCOUNTS_REQUIRE_EMAIL_CONFIRMATION=1
+DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
+```
+
+Восстановление пароля также использует эти SMTP-настройки.
 
 ## Полезные команды
 

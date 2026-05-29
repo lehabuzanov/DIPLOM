@@ -1,11 +1,51 @@
 from django import forms
+from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.contrib.auth.forms import UserCreationForm
+from django.contrib.auth.forms import AuthenticationForm, UserCreationForm
+from django.core.cache import cache
 
 from sem_corpus.apps.accounts.models import UserProfile
 
 
 User = get_user_model()
+
+
+class RateLimitedAuthenticationForm(AuthenticationForm):
+    error_messages = {
+        **AuthenticationForm.error_messages,
+        "rate_limited": (
+            "Слишком много неудачных попыток входа. "
+            "Подождите несколько минут и попробуйте снова."
+        ),
+    }
+
+    def _client_key(self) -> str:
+        username = (self.data.get("username") or "").strip().lower()
+        request = self.request
+        forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR", "") if request else ""
+        ip_address = forwarded_for.split(",", 1)[0].strip() or (request.META.get("REMOTE_ADDR", "") if request else "")
+        return f"login-failures:{ip_address}:{username}"
+
+    def clean(self):
+        key = self._client_key()
+        attempts = cache.get(key, 0)
+        if attempts >= settings.LOGIN_RATE_LIMIT_ATTEMPTS:
+            raise forms.ValidationError(
+                self.error_messages["rate_limited"],
+                code="rate_limited",
+            )
+
+        try:
+            cleaned_data = super().clean()
+        except forms.ValidationError:
+            try:
+                cache.incr(key)
+            except ValueError:
+                cache.set(key, 1, settings.LOGIN_RATE_LIMIT_WINDOW_SECONDS)
+            raise
+
+        cache.delete(key)
+        return cleaned_data
 
 
 class RegistrationForm(UserCreationForm):
