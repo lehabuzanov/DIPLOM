@@ -1,4 +1,9 @@
+import zipfile
+from pathlib import Path
+
 from django import forms
+from django.conf import settings
+from pypdf import PdfReader
 
 from sem_corpus.apps.corpus.models import Article, Author, SavedQuery, SavedSubcorpus
 
@@ -145,6 +150,14 @@ class SubcorpusArticleAddForm(forms.Form):
 
 
 class EditorArticleUploadForm(forms.Form):
+    ALLOWED_EXTENSIONS = {".pdf", ".txt", ".docx"}
+    ALLOWED_CONTENT_TYPES = {
+        "application/pdf",
+        "text/plain",
+        "application/octet-stream",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+
     issue_year = forms.IntegerField(label="Год выпуска")
     issue_volume = forms.CharField(label="Том", max_length=32)
     issue_number = forms.CharField(label="Номер", max_length=32)
@@ -195,6 +208,59 @@ class EditorArticleUploadForm(forms.Form):
     original_url = forms.URLField(label="URL оригинала", required=False)
     source_file = forms.FileField(label="Файл статьи", required=False)
     is_published = forms.BooleanField(label="Опубликовано", required=False, initial=True)
+
+    def clean_source_file(self):
+        source_file = self.cleaned_data.get("source_file")
+        if not source_file:
+            return source_file
+
+        suffix = Path(source_file.name or "").suffix.lower()
+        if suffix not in self.ALLOWED_EXTENSIONS:
+            raise forms.ValidationError("Разрешены только файлы PDF, TXT или DOCX.")
+
+        if source_file.size > settings.EDITOR_UPLOAD_MAX_BYTES:
+            max_mb = settings.EDITOR_UPLOAD_MAX_BYTES // (1024 * 1024)
+            raise forms.ValidationError(f"Файл слишком большой. Максимальный размер: {max_mb} МБ.")
+
+        content_type = getattr(source_file, "content_type", "") or ""
+        if content_type and content_type not in self.ALLOWED_CONTENT_TYPES:
+            raise forms.ValidationError("Тип файла не соответствует разрешенным форматам.")
+
+        try:
+            source_file.seek(0)
+            if suffix == ".pdf":
+                PdfReader(source_file)
+            elif suffix == ".docx":
+                if not zipfile.is_zipfile(source_file):
+                    raise forms.ValidationError("DOCX-файл поврежден или имеет неверный формат.")
+                source_file.seek(0)
+                with zipfile.ZipFile(source_file) as archive:
+                    if "word/document.xml" not in archive.namelist():
+                        raise forms.ValidationError("DOCX-файл поврежден или имеет неверную структуру.")
+        except forms.ValidationError:
+            raise
+        except Exception as exc:
+            if suffix == ".pdf":
+                raise forms.ValidationError("PDF-файл не удалось прочитать. Проверьте файл и повторите загрузку.") from exc
+            raise forms.ValidationError("Файл не удалось проверить. Проверьте файл и повторите загрузку.") from exc
+        finally:
+            try:
+                source_file.seek(0)
+            except (AttributeError, OSError):
+                pass
+
+        return source_file
+
+    def clean(self):
+        cleaned_data = super().clean()
+        source_file = cleaned_data.get("source_file")
+        body_text = (cleaned_data.get("body_text") or "").strip()
+        if source_file and Path(source_file.name or "").suffix.lower() == ".docx" and not body_text:
+            self.add_error(
+                "body_text",
+                "Для DOCX-файла вставьте текст статьи вручную: автоматическое извлечение DOCX не включено.",
+            )
+        return cleaned_data
 
     def clean_authors_text(self):
         value = (self.cleaned_data.get("authors_text") or "").strip()

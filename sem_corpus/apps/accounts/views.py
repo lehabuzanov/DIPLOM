@@ -131,10 +131,17 @@ class HighlightListView(PersonalToolsRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        active_highlight = None
+        active_highlight_id = self.request.GET.get("highlight")
+        if active_highlight_id:
+            active_highlight = ArticleHighlight.objects.filter(
+                pk=active_highlight_id,
+                user=self.request.user,
+            ).first()
         highlights = (
             ArticleHighlight.objects.filter(user=self.request.user)
             .select_related("article", "article__issue")
-            .order_by("article__title", "char_start", "id")
+            .order_by("-updated_at", "-id")
         )
         grouped: OrderedDict[int, dict] = OrderedDict()
         for highlight in highlights:
@@ -143,9 +150,21 @@ class HighlightListView(PersonalToolsRequiredMixin, TemplateView):
                 {
                     "article": highlight.article,
                     "highlights": [],
+                    "active_index": 0,
+                    "open": False,
+                    "latest_updated_at": highlight.updated_at,
                 },
             )
+            if active_highlight and highlight.pk == active_highlight.pk:
+                bucket["active_index"] = len(bucket["highlights"])
+                bucket["open"] = True
             bucket["highlights"].append(highlight)
-        context["highlight_groups"] = list(grouped.values())
+        highlight_groups = list(grouped.values())
+        if active_highlight:
+            highlight_groups.sort(key=lambda group: group["article"].pk != active_highlight.article_id)
+        elif highlight_groups:
+            highlight_groups[0]["open"] = True
+        context["highlight_groups"] = highlight_groups
         context["highlight_count"] = highlights.count()
+        context["active_highlight"] = active_highlight
         return context

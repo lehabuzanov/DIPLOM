@@ -6,10 +6,12 @@ import json
 import re
 from collections import Counter, defaultdict
 from functools import lru_cache
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.postgres.search import SearchHeadline, SearchQuery, SearchRank, SearchVector
 from django.db import transaction
-from django.db.models import F, Q, Sum
+from django.db.models import Count, F, Q, Sum
 from pymorphy3 import MorphAnalyzer
 from razdel import sentenize, tokenize
 
@@ -20,7 +22,9 @@ except ImportError:  # pragma: no cover - optional dependency fallback
 
 from sem_corpus.apps.accounts.models import UserActivity
 from sem_corpus.apps.corpus.models import (
+    Affiliation,
     Article,
+    ArticleFile,
     ArticleText,
     ArticleToken,
     Author,
@@ -384,7 +388,7 @@ def clean_article_body_text(
     anchor_index = -1
     intro_index = -1
     for index, line in enumerate(normalized_lines):
-        if re.match(r"^(введение|introduction)\b", line.lower()):
+        if re.match(r"^(\d+[\.)]?\s*)?(введение|introduction)\b", line.lower()):
             intro_index = index
             break
 
@@ -780,20 +784,32 @@ def search_articles(form, user=None, *, record_history: bool = True):
         token_filter = Q(normalized=normalized)
         if search_mode == SearchHistory.SEARCH_LEMMA:
             token_filter = Q(lemma__normalized=lemma_form)
-        token_rows = list(
+        matching_articles = list(
             ArticleToken.objects.filter(article__in=queryset, is_alpha=True)
             .filter(token_filter)
+            .values("article_id")
+            .annotate(hit_count=Count("id"))
+            .order_by("-hit_count", "article_id")[:100]
+        )
+        matching_article_ids = [row["article_id"] for row in matching_articles]
+        hit_counts = {row["article_id"]: row["hit_count"] for row in matching_articles}
+        token_rows = list(
+            ArticleToken.objects.filter(article_id__in=matching_article_ids, is_alpha=True)
+            .filter(token_filter)
             .select_related("article", "lemma", "article__issue", "article__section", "article__journal")
-            .order_by("article_id", "position")[:300]
+            .order_by("article_id", "position")
         )
         grouped = defaultdict(list)
-        hit_counts = Counter()
         for token_obj in token_rows:
-            grouped[token_obj.article_id].append(token_obj)
-            hit_counts[token_obj.article_id] += 1
-        for article_id, hits in grouped.items():
+            if len(grouped[token_obj.article_id]) < 5:
+                grouped[token_obj.article_id].append(token_obj)
+        for row in matching_articles:
+            article_id = row["article_id"]
+            hits = grouped.get(article_id, [])
+            if not hits:
+                continue
             article = hits[0].article
-            contexts = [build_token_context(article, hit.position) for hit in hits[:5]]
+            contexts = [build_token_context(article, hit.position) for hit in hits]
             results.append(
                 {
                     "article": article,
@@ -977,27 +993,33 @@ def get_frequency_data(
 
 def get_bigram_data(
     articles_queryset,
+    mode: str = "lemma",
     limit: int = 20,
     filter_mode: str = ANALYTICS_FILTER_CURATED,
 ):
     counter = Counter()
-    previous_token: dict[int, str | None] = {}
+    previous_token: dict[tuple[int, str, int], str | None] = {}
     token_rows = (
-        ArticleToken.objects.filter(article__in=articles_queryset, is_alpha=True)
+        ArticleToken.objects.filter(article__in=articles_queryset)
         .exclude(source_section=ArticleToken.SECTION_REFERENCES)
         .select_related("lemma")
         .order_by("article_id", "position")
         .iterator(chunk_size=2500)
     )
     for token in token_rows:
-        label = token.lemma.normalized if token.lemma_id else token.normalized
-        if not is_meaningful_frequency_label(label, filter_mode=filter_mode):
-            previous_token[token.article_id] = None
+        key = (token.article_id, token.source_section, token.sentence_index)
+        if not token.is_alpha:
+            previous_token[key] = None
             continue
-        prior = previous_token.get(token.article_id)
+
+        label = token.normalized if mode == "word" else (token.lemma.normalized if token.lemma_id else token.normalized)
+        if not is_meaningful_frequency_label(label, filter_mode=filter_mode):
+            previous_token[key] = None
+            continue
+        prior = previous_token.get(key)
         if prior:
             counter[f"{prior} {label}"] += 1
-        previous_token[token.article_id] = label
+        previous_token[key] = label
     return [{"label": label, "count": count} for label, count in counter.most_common(limit)]
 
 
@@ -1026,6 +1048,42 @@ def compare_frequency_sets(
         )
     rows.sort(key=lambda item: (-item["shared_count"], -item["total_count"], item["label"]))
     return rows if limit is None else rows[:limit]
+
+
+def cleanup_orphan_corpus_records() -> dict[str, int]:
+    deleted: dict[str, int] = {}
+    media_root = Path(settings.MEDIA_ROOT) / "articles" / "files"
+    linked_files = set(ArticleFile.objects.exclude(file="").values_list("file", flat=True))
+    deleted["media_files"] = 0
+    if media_root.exists():
+        for path in media_root.iterdir():
+            if not path.is_file():
+                continue
+            relative_name = f"articles/files/{path.name}"
+            if relative_name not in linked_files:
+                path.unlink()
+                deleted["media_files"] += 1
+    deleted["authors"] = (
+        Author.objects.annotate(link_count=Count("article_links"))
+        .filter(link_count=0)
+        .delete()[0]
+    )
+    deleted["affiliations"] = (
+        Affiliation.objects.annotate(article_count=Count("article_authors"), author_count=Count("authors"))
+        .filter(article_count=0, author_count=0)
+        .delete()[0]
+    )
+    deleted["keywords"] = (
+        Keyword.objects.annotate(article_count=Count("articles"))
+        .filter(article_count=0)
+        .delete()[0]
+    )
+    deleted["lemmas"] = (
+        Lemma.objects.annotate(token_count=Count("tokens"))
+        .filter(token_count=0)
+        .delete()[0]
+    )
+    return deleted
 
 
 def compare_subcorpora(

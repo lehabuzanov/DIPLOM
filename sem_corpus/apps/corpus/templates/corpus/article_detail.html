@@ -46,7 +46,7 @@
                     {% if can_use_personal_tools %}
                         <div class="article-highlight-hint" id="article-highlight-hint">
                             <span class="small text-secondary">Выделите фрагмент текста мышью, чтобы сохранить пометку.</span>
-                            <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}">Мои пометки</a>
+                            <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}" data-notes-link>Мои пометки</a>
                         </div>
                         <div class="article-highlight-toolbar d-none" id="article-highlight-toolbar">
                             <div class="d-flex flex-wrap justify-content-between gap-2 align-items-center">
@@ -58,7 +58,7 @@
                                     <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-prev" aria-label="Предыдущая пометка">&larr;</button>
                                     <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-next" aria-label="Следующая пометка">&rarr;</button>
                                     <button class="btn btn-sm btn-outline-secondary" type="button" id="article-highlight-delete">Удалить</button>
-                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}">Все пометки</a>
+                                    <a class="btn btn-sm btn-outline-primary" href="{% url 'accounts:highlights' %}" data-notes-link>Все пометки</a>
                                 </div>
                             </div>
                         </div>
@@ -185,6 +185,7 @@
         const saveButton = document.getElementById("article-highlight-save");
         const cancelButton = document.getElementById("article-highlight-cancel");
         const feedback = document.getElementById("article-highlight-feedback");
+        const notesLinks = Array.from(document.querySelectorAll("[data-notes-link]"));
         if (!reader || !body || !status) {
             return;
         }
@@ -199,6 +200,17 @@
         let activeHighlightIndex = -1;
         let pendingSelection = null;
         const canHighlight = reader.dataset.canHighlight === "true";
+        const notesUrl = "{% url 'accounts:highlights' %}";
+
+        function updateNotesLinks() {
+            let targetUrl = notesUrl;
+            if (highlights.length && activeHighlightIndex >= 0) {
+                targetUrl += "?highlight=" + highlights[activeHighlightIndex].id;
+            }
+            notesLinks.forEach(function (link) {
+                link.href = targetUrl;
+            });
+        }
 
         function renderStatus() {
             if (!total) {
@@ -376,12 +388,14 @@
             }
             if (!highlights.length) {
                 counter.textContent = "";
+                updateNotesLinks();
                 return;
             }
             if (activeHighlightIndex < 0) {
                 activeHighlightIndex = 0;
             }
             counter.textContent = (activeHighlightIndex + 1) + " из " + highlights.length;
+            updateNotesLinks();
         }
 
         async function loadUntilOffset(targetEnd) {

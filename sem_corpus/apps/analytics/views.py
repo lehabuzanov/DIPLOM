@@ -72,9 +72,9 @@ def _cached_frequency_rows(article_ids, signature: str, mode: str, filter_mode: 
 
 
 @lru_cache(maxsize=32)
-def _cached_bigram_rows(article_ids, signature: str, filter_mode: str):
+def _cached_bigram_rows(article_ids, signature: str, mode: str, filter_mode: str):
     queryset = Article.objects.filter(pk__in=article_ids)
-    return _serialize_rows(get_bigram_data(queryset, limit=None, filter_mode=filter_mode))
+    return _serialize_rows(get_bigram_data(queryset, mode=mode, limit=None, filter_mode=filter_mode))
 
 
 @lru_cache(maxsize=32)
@@ -164,7 +164,7 @@ class AnalyticsMixin:
             if include_lists and dataset in {"all", "frequency"}:
                 frequency_rows = get_frequency_data(target_articles, mode=mode, limit=None, filter_mode=filter_mode)
             if include_lists and dataset in {"all", "bigrams"}:
-                bigram_rows = get_bigram_data(target_articles, limit=None, filter_mode=filter_mode)
+                bigram_rows = get_bigram_data(target_articles, mode=mode, limit=None, filter_mode=filter_mode)
 
             if comparison_pair:
                 _left_articles, _right_articles, left_label, right_label = comparison_pair
@@ -176,7 +176,7 @@ class AnalyticsMixin:
             if include_lists and dataset in {"all", "frequency"}:
                 frequency_rows = get_frequency_data(base_articles, mode=mode, limit=None, filter_mode=filter_mode)
             if include_lists and dataset in {"all", "bigrams"}:
-                bigram_rows = get_bigram_data(base_articles, limit=None, filter_mode=filter_mode)
+                bigram_rows = get_bigram_data(base_articles, mode=mode, limit=None, filter_mode=filter_mode)
 
         return {
             "form": form,
@@ -229,7 +229,7 @@ class AnalyticsMixin:
         if not article_ids:
             return []
         if dataset == "bigrams":
-            return _deserialize_rows(_cached_bigram_rows(article_ids, signature, filter_mode))
+            return _deserialize_rows(_cached_bigram_rows(article_ids, signature, mode, filter_mode))
         return _deserialize_rows(_cached_frequency_rows(article_ids, signature, mode, filter_mode))
 
     def get_comparison_dataset_rows(self, left_articles, right_articles, *, mode: str, filter_mode: str):

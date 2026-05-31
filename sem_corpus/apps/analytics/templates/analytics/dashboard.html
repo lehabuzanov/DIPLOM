@@ -77,7 +77,7 @@
 
 <div class="row g-4">
     <div class="col-lg-6">
-        <div class="card surface-card h-100">
+        <div class="card surface-card h-100 analytics-table-card">
             <div class="card-body p-4">
                 <div class="analytics-card-head">
                     <h2 class="h4 mb-0">Частотный список</h2>
@@ -96,6 +96,8 @@
                     <div class="analytics-card-meta">
                         <div class="analytics-mode-meta">
                             <span class="small text-secondary analytics-scope-meta" title="Активный режим фильтрации статистики">
+                                <span>{% if mode == 'word' %}Словоформы{% else %}Леммы{% endif %}</span>
+                                <span>·</span>
                                 <span>{{ filter_mode_label }}</span>
                                 <span class="inline-help-badge inline-help-badge-strong" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
                             </span>
@@ -124,7 +126,7 @@
         </div>
     </div>
     <div class="col-lg-6">
-        <div class="card surface-card h-100">
+        <div class="card surface-card h-100 analytics-table-card">
             <div class="card-body p-4">
                 <div class="analytics-card-head">
                     <h2 class="h4 mb-0">Биграммы</h2>
@@ -143,6 +145,8 @@
                     <div class="analytics-card-meta">
                         <div class="analytics-mode-meta">
                             <span class="small text-secondary analytics-scope-meta" title="Активный режим фильтрации статистики">
+                                <span>{% if mode == 'word' %}Словоформы{% else %}Леммы{% endif %}</span>
+                                <span>·</span>
                                 <span>{{ filter_mode_label }}</span>
                                 <span class="inline-help-badge inline-help-badge-strong" data-bs-toggle="tooltip" title="{{ filter_help_text }}">?</span>
                             </span>

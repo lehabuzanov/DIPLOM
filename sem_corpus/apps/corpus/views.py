@@ -11,6 +11,7 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.text import slugify
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
+from pypdf import PdfReader
 from razdel import sentenize
 
 from sem_corpus.apps.accounts.utils import user_can_edit_corpus, user_can_use_personal_tools
@@ -46,6 +47,7 @@ from sem_corpus.apps.corpus.services import (
     add_article_to_subcorpus,
     apply_article_filters,
     build_subcorpus,
+    clean_article_body_text,
     deserialize_payload,
     describe_query_payload,
     export_search_results_csv,
@@ -117,6 +119,33 @@ def resolve_file_kind(filename: str) -> str:
     if suffix == ".txt":
         return ArticleFile.KIND_TXT
     return ArticleFile.KIND_OTHER
+
+
+def extract_uploaded_article_text(source_file) -> str:
+    if not source_file:
+        return ""
+    suffix = Path(source_file.name or "").suffix.lower()
+    try:
+        source_file.seek(0)
+        if suffix == ".txt":
+            payload = source_file.read()
+            if isinstance(payload, str):
+                return payload
+            for encoding in ("utf-8-sig", "utf-8", "cp1251"):
+                try:
+                    return payload.decode(encoding)
+                except UnicodeDecodeError:
+                    continue
+            return payload.decode("utf-8", errors="replace")
+        if suffix == ".pdf":
+            reader = PdfReader(source_file)
+            return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+    finally:
+        try:
+            source_file.seek(0)
+        except (AttributeError, OSError):
+            pass
+    return ""
 
 
 SUBCORPUS_LAST_REMOVED_SESSION_KEY = "last_removed_subcorpus_article"
@@ -220,27 +249,48 @@ def create_or_update_editor_article(cleaned_data) -> Article:
             display_name=author_payload["display_name"],
         )
 
+    source_file = cleaned_data.get("source_file")
+    submitted_body_text = (cleaned_data.get("body_text") or "").strip()
+    extracted_body_text = ""
+    if not submitted_body_text and source_file:
+        extracted_body_text = extract_uploaded_article_text(source_file)
+    body_text = submitted_body_text
+    if not body_text and extracted_body_text:
+        body_text = clean_article_body_text(
+            extracted_body_text,
+            title=cleaned_data["title"],
+            abstract_text=cleaned_data.get("abstract_text", ""),
+            keywords_text=cleaned_data.get("keywords_text", ""),
+            language=cleaned_data["language"],
+        ) or extracted_body_text.strip()
+
     ArticleText.objects.update_or_create(
         article=article,
         defaults={
             "title_text": cleaned_data["title"],
             "abstract_text": cleaned_data.get("abstract_text", ""),
             "keywords_text": cleaned_data.get("keywords_text", ""),
-            "body_text": cleaned_data.get("body_text", ""),
+            "body_text": body_text,
             "references_text": cleaned_data.get("references_text", ""),
         },
     )
     sync_keywords_for_article(article, cleaned_data.get("keywords_text", ""))
 
-    source_file = cleaned_data.get("source_file")
     if source_file:
         article_file, _ = ArticleFile.objects.get_or_create(
             article=article,
             file_kind=resolve_file_kind(source_file.name),
             defaults={"original_filename": source_file.name},
         )
+        old_file_name = article_file.file.name
         article_file.original_filename = source_file.name
+        article_file.mime_type = getattr(source_file, "content_type", "") or ""
         article_file.external_url = cleaned_data.get("original_url", "")
+        source_file.seek(0)
+        article_file.checksum = hashlib.sha256(source_file.read()).hexdigest()
+        source_file.seek(0)
+        if old_file_name:
+            article_file.file.delete(save=False)
         article_file.file.save(source_file.name, source_file, save=False)
         article_file.save()
 

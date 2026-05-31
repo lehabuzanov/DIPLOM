@@ -11,9 +11,9 @@ class HomeView(TemplateView):
         context = super().get_context_data(**kwargs)
         articles = Article.objects.filter(is_published=True)
         context["stats"] = {
-            "issues": Issue.objects.count(),
+            "issues": Issue.objects.filter(articles__is_published=True).distinct().count(),
             "articles": articles.count(),
-            "authors": Author.objects.count(),
+            "authors": Author.objects.filter(article_links__article__is_published=True).distinct().count(),
             "tokens": articles.aggregate(total=Sum("text__token_count")).get("total") or 0,
         }
         context["latest_articles"] = (
@@ -32,9 +32,9 @@ class AboutView(TemplateView):
         context = super().get_context_data(**kwargs)
         articles = Article.objects.filter(is_published=True)
         context["stats"] = {
-            "issues": Issue.objects.count(),
+            "issues": Issue.objects.filter(articles__is_published=True).distinct().count(),
             "articles": articles.count(),
-            "authors": Author.objects.count(),
+            "authors": Author.objects.filter(article_links__article__is_published=True).distinct().count(),
         }
         return context
 

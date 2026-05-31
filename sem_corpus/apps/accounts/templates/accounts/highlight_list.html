@@ -17,7 +17,7 @@
             <div class="accordion-item surface-card overflow-hidden">
                 <h2 class="accordion-header">
                     <button
-                        class="accordion-button {% if not forloop.first %}collapsed{% endif %}"
+                        class="accordion-button {% if not group.open %}collapsed{% endif %}"
                         type="button"
                         data-bs-toggle="collapse"
                         data-bs-target="#highlight-group-{{ group.article.pk }}"
@@ -28,10 +28,10 @@
                 </h2>
                 <div
                     id="highlight-group-{{ group.article.pk }}"
-                    class="accordion-collapse collapse {% if forloop.first %}show{% endif %}"
+                    class="accordion-collapse collapse {% if group.open %}show{% endif %}"
                     data-bs-parent="#highlightAccordion"
                 >
-                    <div class="accordion-body" data-highlight-group>
+                    <div class="accordion-body" data-highlight-group data-active-index="{{ group.active_index }}">
                         <div class="d-flex flex-wrap justify-content-between gap-3 align-items-center mb-3">
                             <div class="small text-secondary">
                                 {{ group.article.issue.year }} · Том {{ group.article.issue.volume }}, № {{ group.article.issue.number }}
@@ -43,7 +43,11 @@
                             </div>
                         </div>
                         {% for highlight in group.highlights %}
-                            <div class="saved-highlight {% if not forloop.first %}d-none{% endif %}" data-note-panel>
+                            <div
+                                class="saved-highlight {% if forloop.counter0 != group.active_index %}d-none{% endif %}"
+                                data-note-panel
+                                data-highlight-id="{{ highlight.pk }}"
+                            >
                                 <blockquote class="saved-highlight-text mb-3">{{ highlight.selected_text }}</blockquote>
                                 <form method="post" action="{% url 'corpus:article-highlight-edit' highlight.pk %}" class="saved-highlight-note-form mb-3">
                                     {% csrf_token %}
@@ -92,7 +96,7 @@
         const previousButton = group.querySelector("[data-note-prev]");
         const nextButton = group.querySelector("[data-note-next]");
         const counter = group.querySelector("[data-note-counter]");
-        let activeIndex = 0;
+        let activeIndex = Number(group.dataset.activeIndex || "0");
 
         function render() {
             panels.forEach(function (panel, index) {
