@@ -11,7 +11,6 @@ from django.http import FileResponse, Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect
 from django.utils.text import slugify
 from django.views.generic import DetailView, FormView, ListView, TemplateView, View
-from pypdf import PdfReader
 from razdel import sentenize
 
 from sem_corpus.apps.accounts.utils import user_can_edit_corpus, user_can_use_personal_tools
@@ -43,6 +42,7 @@ from sem_corpus.apps.corpus.models import (
     payload_to_querystring,
 )
 from sem_corpus.apps.corpus.geo import assign_affiliation_geography, normalize_city_name
+from sem_corpus.apps.corpus.pdf_extraction import extract_pdf_text
 from sem_corpus.apps.corpus.services import (
     add_article_to_subcorpus,
     apply_article_filters,
@@ -138,8 +138,8 @@ def extract_uploaded_article_text(source_file) -> str:
                     continue
             return payload.decode("utf-8", errors="replace")
         if suffix == ".pdf":
-            reader = PdfReader(source_file)
-            return "\n\n".join((page.extract_text() or "").strip() for page in reader.pages).strip()
+            payload = source_file.read()
+            return extract_pdf_text(payload)
     finally:
         try:
             source_file.seek(0)

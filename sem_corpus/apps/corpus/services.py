@@ -12,6 +12,8 @@ from django.conf import settings
 from django.contrib.postgres.search import SearchHeadline, SearchQuery, SearchRank, SearchVector
 from django.db import transaction
 from django.db.models import Count, F, Q, Sum
+from django.utils.html import escape, strip_tags
+from django.utils.safestring import mark_safe
 from pymorphy3 import MorphAnalyzer
 from razdel import sentenize, tokenize
 
@@ -36,8 +38,11 @@ from sem_corpus.apps.corpus.models import (
     SearchHistory,
     Section,
 )
+from sem_corpus.apps.corpus.text_quality import sanitize_extracted_text
 
 INTERNAL_QUERY_KEYS = {"saved_query", "subcorpus", "page"}
+HIGHLIGHT_START = "[[SEM_HIGHLIGHT_START]]"
+HIGHLIGHT_END = "[[SEM_HIGHLIGHT_END]]"
 ANALYTICS_FILTER_CURATED = "curated"
 ANALYTICS_FILTER_ALL = "all"
 
@@ -207,6 +212,29 @@ def normalize_whitespace(value: str | None) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def render_highlighted_context(value: str | None) -> str:
+    if not value:
+        return ""
+
+    parts: list[str] = []
+    highlighted = False
+    for part in re.split(f"({re.escape(HIGHLIGHT_START)}|{re.escape(HIGHLIGHT_END)})", value):
+        if not part:
+            continue
+        if part == HIGHLIGHT_START:
+            highlighted = True
+            continue
+        if part == HIGHLIGHT_END:
+            highlighted = False
+            continue
+        escaped = escape(part)
+        if highlighted:
+            parts.append(f"<mark>{escaped}</mark>")
+        else:
+            parts.append(str(escaped))
+    return mark_safe("".join(parts))
+
+
 def detect_token_language(token_value: str, article_language: str = "ru") -> str:
     if LATIN_TOKEN_RE.fullmatch(token_value or ""):
         return "en"
@@ -242,7 +270,6 @@ def analyze_alpha_token(token_value: str, language_hint: str = "ru") -> tuple[st
     return parse.normal_form, str(parse.tag.POS or ""), morph_tag, token_language
 
 
-@lru_cache(maxsize=50000)
 def get_or_create_lemma_id(normalized: str, language: str, part_of_speech: str) -> int:
     lemma, _ = Lemma.objects.get_or_create(
         normalized=normalized,
@@ -375,7 +402,7 @@ def clean_article_body_text(
     if not body_text:
         return ""
 
-    text = body_text.replace("\r", "\n").replace("\u00ad", "")
+    text = sanitize_extracted_text(body_text)
     text = re.sub(r"(?<=[A-Za-zА-Яа-яЁё])-\s*\n\s*(?=[A-Za-zА-Яа-яЁё])", "", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
 
@@ -483,10 +510,13 @@ def clean_article_body_text(
 
 
 def flatten_article_text(article_text: ArticleText) -> str:
-    body_text = (article_text.body_text or "").strip()
-    parts = [article_text.title_text, article_text.abstract_text]
+    body_text = sanitize_extracted_text(article_text.body_text)
+    parts = [
+        sanitize_extracted_text(article_text.title_text),
+        sanitize_extracted_text(article_text.abstract_text),
+    ]
     if article_text.keywords_text:
-        parts.append(article_text.keywords_text)
+        parts.append(sanitize_extracted_text(article_text.keywords_text))
     if body_text:
         parts.append(body_text)
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
@@ -498,7 +528,7 @@ def rebuild_article_index(article: Article) -> None:
         return
 
     article_text = article.text
-    article_text.body_text = (article_text.body_text or "").strip()
+    article_text.body_text = sanitize_extracted_text(article_text.body_text)
     article_text.cleaned_text = flatten_article_text(article_text)
     sentences = list(sentenize(article_text.cleaned_text))
     sentence_pointer = 0
@@ -507,6 +537,7 @@ def rebuild_article_index(article: Article) -> None:
     tokens_to_create = []
     position = 0
     alpha_lemma_values = set()
+    lemma_id_cache: dict[tuple[str, str, str], int] = {}
     section_map = [
         ("title_text", ArticleToken.SECTION_TITLE),
         ("abstract_text", ArticleToken.SECTION_ABSTRACT),
@@ -550,7 +581,11 @@ def rebuild_article_index(article: Article) -> None:
             normalized = normalize_historical_cyrillic(normalized)
             if len(normalized) > 120 or len(normal_form) > 120 or len(morph_tag) > 128:
                 continue
-            lemma_id = get_or_create_lemma_id(normal_form, token_language, part_of_speech)
+            lemma_key = (normal_form, token_language, part_of_speech)
+            lemma_id = lemma_id_cache.get(lemma_key)
+            if lemma_id is None:
+                lemma_id = get_or_create_lemma_id(normal_form, token_language, part_of_speech)
+                lemma_id_cache[lemma_key] = lemma_id
             alpha_lemma_values.add(normal_form)
         elif len(normalized) > 120:
             continue
@@ -711,7 +746,7 @@ def build_token_context(article: Article, position: int, radius: int = 7) -> str
     left = " ".join(token.token for token in tokens if token.position < position)
     hit = next((token.token for token in tokens if token.position == position), "")
     right = " ".join(token.token for token in tokens if token.position > position)
-    return f"{left} <mark>{hit}</mark> {right}".strip()
+    return render_highlighted_context(f"{left} {HIGHLIGHT_START}{hit}{HIGHLIGHT_END} {right}".strip())
 
 
 def record_user_activity(user, activity_type: str, title: str, payload: dict | None = None) -> None:
@@ -759,8 +794,8 @@ def search_articles(form, user=None, *, record_history: bool = True):
                     "cleaned_text",
                     search_query,
                     config=search_config,
-                    start_sel="<mark>",
-                    stop_sel="</mark>",
+                    start_sel=HIGHLIGHT_START,
+                    stop_sel=HIGHLIGHT_END,
                     max_fragments=3,
                     max_words=28,
                     min_words=10,
@@ -774,7 +809,7 @@ def search_articles(form, user=None, *, record_history: bool = True):
             results.append(
                 {
                     "article": article_text.article,
-                    "contexts": [article_text.snippet],
+                    "contexts": [render_highlighted_context(article_text.snippet)],
                     "hit_count": 1,
                     "rank": round(float(article_text.rank), 3),
                 }
@@ -1140,7 +1175,7 @@ def export_search_results_csv(results):
                 row["article"].issue.year,
                 row["article"].section.name if row["article"].section else "",
                 row.get("hit_count", 0),
-                " | ".join(row.get("contexts", [])),
+                " | ".join(strip_tags(str(context)) for context in row.get("contexts", [])),
             ]
         )
     return buffer.getvalue()

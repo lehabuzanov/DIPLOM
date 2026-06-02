@@ -160,7 +160,7 @@
                 <div class="small text-secondary mb-2">Совпадений: {{ result.hit_count }}</div>
                 <div class="vstack gap-2">
                     {% for context in result.contexts %}
-                        <div class="context-line">{{ context|safe }}</div>
+                        <div class="context-line">{{ context }}</div>
                     {% empty %}
                         <div class="text-secondary small">Статья соответствует заданным фильтрам.</div>
                     {% endfor %}

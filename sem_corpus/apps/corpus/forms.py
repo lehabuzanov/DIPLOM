@@ -3,9 +3,9 @@ from pathlib import Path
 
 from django import forms
 from django.conf import settings
-from pypdf import PdfReader
 
 from sem_corpus.apps.corpus.models import Article, Author, SavedQuery, SavedSubcorpus
+from sem_corpus.apps.corpus.pdf_extraction import validate_pdf_payload
 
 
 class SearchForm(forms.Form):
@@ -229,7 +229,7 @@ class EditorArticleUploadForm(forms.Form):
         try:
             source_file.seek(0)
             if suffix == ".pdf":
-                PdfReader(source_file)
+                validate_pdf_payload(source_file.read())
             elif suffix == ".docx":
                 if not zipfile.is_zipfile(source_file):
                     raise forms.ValidationError("DOCX-файл поврежден или имеет неверный формат.")

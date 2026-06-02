@@ -69,7 +69,7 @@ Frontend:
 
 - `requests` для HTTP-запросов;
 - `BeautifulSoup` для разбора HTML-страниц OJS;
-- `pypdf` для извлечения текста из PDF.
+- `PyMuPDF` и резервный `pypdf` для извлечения текста из PDF.
 
 Развертывание:
 

@@ -22,7 +22,7 @@ body {
 body {
     margin: 0;
     color: var(--ink);
-    font-family: "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     background:
         radial-gradient(circle at top right, rgba(45, 119, 255, 0.08), transparent 22rem),
         linear-gradient(180deg, #f5f9fc 0%, #eef5f9 100%);
@@ -144,7 +144,7 @@ h6,
 .h5,
 .h6,
 label {
-    font-family: "Cuprum", "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
 }
 
 .brand-title {
@@ -232,7 +232,7 @@ label {
 }
 
 .footer-title {
-    font-family: "Cuprum", "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     font-size: 1.1rem;
     color: #173f5f;
 }
@@ -776,7 +776,7 @@ label {
 
 .table thead th {
     color: #29506b;
-    font-family: "Cuprum", "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     font-weight: 700;
 }
 
@@ -802,7 +802,7 @@ label {
 .notes-accordion .accordion-button {
     gap: 1rem;
     color: var(--ink);
-    font-family: "Cuprum", "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     font-size: 1.08rem;
     font-weight: 700;
 }
@@ -1001,7 +1001,7 @@ label {
 }
 
 .leaflet-container {
-    font-family: "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     color: var(--ink);
 }
 
@@ -1353,7 +1353,7 @@ label {
 
 .search-tools-accordion .accordion-button {
     color: var(--ink);
-    font-family: "Cuprum", "Open Sans", Arial, sans-serif;
+    font-family: system-ui, -apple-system, "Segoe UI", Arial, sans-serif;
     font-size: 1.08rem;
     font-weight: 700;
 }

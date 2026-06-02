@@ -254,6 +254,18 @@ docker compose exec web python manage.py repair_article_texts
 - восстанавливает `ArticleText`;
 - автоматически перестраивает токены, леммы и поисковый индекс.
 
+Для проверки качества извлечения текста выполните:
+
+```powershell
+docker compose exec web python manage.py audit_article_texts --check-pdf-pages
+```
+
+Для ремонта только проблемных записей:
+
+```powershell
+docker compose exec web python manage.py repair_article_texts --quality-only --skip-download
+```
+
 ## Переиндексация корпуса
 
 ```powershell
@@ -281,10 +293,18 @@ docker compose exec web python manage.py selfcheck_corpus
 - список сохраненных запросов и подкорпусов;
 - редакторская форма загрузки.
 
+Перед production-публикацией дополнительно выполните:
+
+```powershell
+docker compose exec web python manage.py production_check --strict
+```
+
 ## Рекомендованный порядок обслуживания
 
 1. Запустить сайт и БД.
 2. Выполнить `sync_ojs_journal --skip-existing`.
-3. Выполнить `repair_article_texts`.
-4. Выполнить `selfcheck_corpus`.
-5. При необходимости выполнить `rebuild_corpus_index`.
+3. Выполнить `audit_article_texts --check-pdf-pages`.
+4. Выполнить `repair_article_texts --quality-only --skip-download`, если аудит нашел проблемы.
+5. Выполнить `selfcheck_corpus`.
+6. Выполнить `production_check --strict` перед публикацией.
+7. При необходимости выполнить `rebuild_corpus_index`.

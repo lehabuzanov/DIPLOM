@@ -32,7 +32,7 @@
 - Аналитика: `Chart.js`
 - Токенизация: `razdel`
 - Лемматизация: `pymorphy3 + simplemma`
-- Импорт архива: `requests + BeautifulSoup + pypdf`
+- Импорт архива: `requests + BeautifulSoup + PyMuPDF + pypdf fallback`
 
 ## Быстрый запуск через Docker
 
@@ -109,11 +109,12 @@ DJANGO_CSRF_COOKIE_SECURE=1
 
 Контейнер `web` автоматически:
 
-- устанавливает зависимости;
 - применяет миграции;
 - удаляет старый демонстрационный контент;
 - создает и синхронизирует роли, группы Django и права доступа;
 - поднимает сайт на `8000` порту.
+
+Зависимости устанавливаются на этапе `docker compose build`, поэтому старт контейнера не зависит от доступности PyPI.
 
 ## Загрузка полного архива журнала
 
@@ -140,12 +141,36 @@ docker compose exec web python manage.py repair_article_texts
 
 После доработки проекта эта команда уже успешно восстановила тексты для всех статей корпуса.
 
+Проверка качества извлеченного текста:
+
+```powershell
+docker compose exec web python manage.py audit_article_texts --check-pdf-pages
+```
+
+Точечный ремонт только проблемных текстов:
+
+```powershell
+docker compose exec web python manage.py repair_article_texts --quality-only --skip-download
+```
+
 ## Самопроверка
 
 Проверка ключевых функций:
 
 ```powershell
 docker compose exec web python manage.py selfcheck_corpus
+```
+
+Production-ready проверка перед выкладкой:
+
+```powershell
+docker compose exec web python manage.py production_check --strict
+```
+
+Автотесты критичных сценариев:
+
+```powershell
+docker compose exec web python manage.py test sem_corpus.apps.corpus
 ```
 
 Проверка структуры Django:
@@ -244,6 +269,7 @@ docker compose exec web python manage.py seed_demo_data --reset-passwords
 - `DJANGO_DEBUG=0`;
 - длинный случайный `DJANGO_SECRET_KEY`;
 - реальные `DJANGO_ALLOWED_HOSTS` и `DJANGO_CSRF_TRUSTED_ORIGINS`;
+- `LEAFLET_TILE_URL`, если хостер использует свой источник картографических тайлов вместо OpenStreetMap;
 - `DJANGO_SECURE_SSL_REDIRECT=1`, `DJANGO_SESSION_COOKIE_SECURE=1`, `DJANGO_CSRF_COOKIE_SECURE=1` при работе через HTTPS;
 - `DJANGO_SECURE_HSTS_SECONDS`, если домен полностью обслуживается по HTTPS;
 - SMTP-параметры `DJANGO_EMAIL_*`, если будет включаться отправка писем.
@@ -262,10 +288,12 @@ DJANGO_EMAIL_BACKEND=django.core.mail.backends.smtp.EmailBackend
 ```powershell
 docker compose exec web python manage.py prepare_access_control --assign-missing-researcher
 docker compose exec web python manage.py sync_ojs_journal --skip-existing
+docker compose exec web python manage.py audit_article_texts --check-pdf-pages
 docker compose exec web python manage.py repair_article_texts
 docker compose exec web python manage.py rebuild_corpus_index
 docker compose exec web python manage.py refresh_author_geography
 docker compose exec web python manage.py selfcheck_corpus
+docker compose exec web python manage.py production_check --strict
 docker compose exec web python manage.py import_corpus_batch --source sample_data/batch_import
 docker compose exec web python manage.py changepassword admin
 ```

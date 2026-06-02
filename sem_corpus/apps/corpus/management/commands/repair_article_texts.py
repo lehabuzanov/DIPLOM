@@ -8,6 +8,7 @@ from django.core.management.base import BaseCommand
 from sem_corpus.apps.corpus.models import Article, ArticleFile, ArticleText
 from sem_corpus.apps.corpus.ojs_import import build_session, extract_text_from_pdf_bytes
 from sem_corpus.apps.corpus.services import clean_article_body_text
+from sem_corpus.apps.corpus.text_quality import assess_text_quality, sanitize_extracted_text
 
 
 class Command(BaseCommand):
@@ -18,16 +19,22 @@ class Command(BaseCommand):
         parser.add_argument("--limit", type=int, default=0, help="Limit the number of repaired articles.")
         parser.add_argument("--force", action="store_true", help="Rebuild text even if the article already has body text.")
         parser.add_argument(
+            "--quality-only",
+            action="store_true",
+            help="Repair only articles whose current text has extraction-quality issues.",
+        )
+        parser.add_argument("--min-words", type=int, default=120, help="Minimum words expected in a healthy body text.")
+        parser.add_argument(
             "--skip-download",
             action="store_true",
             help="Use only locally saved files and do not request missing PDFs from remote URLs.",
         )
 
     def handle(self, *args, **options):
-        queryset = Article.objects.published().prefetch_related("files", "keywords")
+        queryset = Article.objects.published().select_related("text").prefetch_related("files", "keywords")
         if options["article_id"]:
             queryset = queryset.filter(pk=options["article_id"])
-        if not options["force"]:
+        if not options["force"] and not options["quality_only"]:
             queryset = queryset.exclude(text__body_text__gt="").distinct()
         if options["limit"]:
             queryset = queryset[: options["limit"]]
@@ -39,6 +46,12 @@ class Command(BaseCommand):
 
         for article in queryset:
             article_text = getattr(article, "text", None)
+            if options["quality_only"] and article_text:
+                current_quality = assess_text_quality(article_text.body_text, min_words=options["min_words"])
+                if current_quality.ok:
+                    skipped += 1
+                    continue
+
             article_file = article.files.filter(file_kind=ArticleFile.KIND_PDF).first()
             pdf_bytes = b""
             extracted_text = ""
@@ -79,6 +92,7 @@ class Command(BaseCommand):
                 keywords_text=keyword_text or (article_text.keywords_text if article_text else ""),
                 language=article.language,
             )
+            cleaned_body_text = cleaned_body_text or sanitize_extracted_text(extracted_text)
             defaults = {
                 "title_text": article.title,
                 "abstract_text": article.abstract or (article_text.abstract_text if article_text else ""),
@@ -88,7 +102,9 @@ class Command(BaseCommand):
             }
             ArticleText.objects.update_or_create(article=article, defaults=defaults)
             repaired += 1
-            self.stdout.write(self.style.SUCCESS(f"Repaired text for article {article.pk}: {article.title}"))
+            quality = assess_text_quality(cleaned_body_text, min_words=options["min_words"])
+            flag_label = ", ".join(quality.flags) if quality.flags else "ok"
+            self.stdout.write(self.style.SUCCESS(f"Repaired text for article {article.pk}: {article.title} [{flag_label}]"))
 
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS(f"Recovered texts: {repaired}"))

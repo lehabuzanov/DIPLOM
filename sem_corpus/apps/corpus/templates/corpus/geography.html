@@ -1,9 +1,10 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block title %}География авторов | {{ site_short_title }}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="{% static 'vendor/leaflet/leaflet.css' %}">
 {% endblock %}
 
 {% block content %}
@@ -277,7 +278,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{% static 'vendor/leaflet/leaflet.js' %}"></script>
 <script>
     (function () {
         let mapPoints = {{ map_payload|safe }};
@@ -372,7 +373,7 @@
                 scrollWheelZoom: true,
                 zoomControl: true
             });
-            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+            L.tileLayer("{{ leaflet_tile_url|escapejs }}", {
                 maxZoom: 18,
                 attribution: ""
             }).addTo(map);

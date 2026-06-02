@@ -9,6 +9,7 @@ def site_context(request):
         "site_short_title": settings.CORPUS_SHORT_TITLE,
         "university_name": settings.UNIVERSITY_NAME,
         "journal_base_url": settings.JOURNAL_BASE_URL,
+        "leaflet_tile_url": settings.LEAFLET_TILE_URL,
         "can_edit_corpus": user_can_edit_corpus(request.user),
         "can_use_personal_tools": user_can_use_personal_tools(request.user),
     }

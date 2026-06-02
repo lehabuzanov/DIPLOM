@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import io
 import re
 from dataclasses import dataclass
 from datetime import datetime
@@ -12,7 +11,6 @@ import requests
 from bs4 import BeautifulSoup
 from django.core.files.base import ContentFile
 from django.utils.text import slugify
-from pypdf import PdfReader
 
 from sem_corpus.apps.corpus.models import (
     Affiliation,
@@ -26,6 +24,7 @@ from sem_corpus.apps.corpus.models import (
     Section,
 )
 from sem_corpus.apps.corpus.geo import assign_affiliation_geography
+from sem_corpus.apps.corpus.pdf_extraction import extract_pdf_text
 from sem_corpus.apps.corpus.services import clean_article_body_text, sync_keywords_for_article
 
 
@@ -266,11 +265,7 @@ def parse_article_page(session: requests.Session, article_url: str) -> dict[str,
 
 
 def extract_text_from_pdf_bytes(payload: bytes) -> str:
-    reader = PdfReader(io.BytesIO(payload))
-    pages = []
-    for page in reader.pages:
-        pages.append(page.extract_text() or "")
-    return normalize_multiline_text("\n\n".join(pages))
+    return normalize_multiline_text(extract_pdf_text(payload))
 
 
 def download_pdf_payload(session: requests.Session, pdf_url: str) -> tuple[bytes, str]:

@@ -6,4 +6,5 @@ __pycache__
 media
 staticfiles
 .env
+backups
 postgres_data

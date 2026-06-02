@@ -6,4 +6,5 @@ simplemma>=1.1.2,<1.2
 beautifulsoup4>=4.12,<4.13
 requests>=2.32,<2.33
 pypdf>=5.4,<5.5
+pymupdf>=1.24,<1.25
 gunicorn>=23.0,<24.0
